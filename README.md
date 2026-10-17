@@ -8,9 +8,28 @@ M5Stack CoreS3にModuleLLMとDisplay Module 13.2をスタックして使う実�
 
 現在の既定ビルドは`m5stack-cores3-hello`です。
 CoreS3 + ModuleDisplayで、外部画面だけに紺色背景・白い枠・中央の`Hello World`を表示します。
-M5GFXの`M5ModuleDisplay`だけを使用し、`display.init()`と既定解像度で確認します。
+M5GFXのHDMIドライバーを使用し、`display.init()`と1280×720で確認します。
+`CoreS3ModuleDisplay`は標準`M5ModuleDisplay`と同じピン・SPI・映像設定を使い、
+HDMI送信ICの制御だけをソフトウェアI2C（port=-1、SDA=12、SCL=11）へ切り替えます。
 CoreS3本体LCD・タッチ・電源管理の初期化は行いません。ModuleDisplay側の外部給電が必要です。
 M5Unified・Avatar・独自リトライ・追加I2C診断はビルド対象から外します。
+
+Hello World版はM5GFX **0.2.33**を使用します。0.2.32には、HDMI送信ICへの書き込みが
+失敗扱いになると初期化シーケンスを途中で打ち切る処理があります。
+[公式修正 #339](https://github.com/m5stack/M5GFX/pull/339)では、ModuleDisplayのI2C直列抵抗に
+よりACKのLow電圧が高くなり、書き込みが受理されていてもNACKと誤判定する事例が報告されています。
+特に`reg:ff val:81`の失敗と、その後のHDMI初期化失敗が今回の過去ログと一致します。
+0.2.33では設定シーケンス全体を送信するよう修正されています。
+今回のCoreS3では0.2.33への更新だけでは初期化に失敗しました。
+バンク`0x81`は失敗扱いでも実際には切り替わっていましたが、その後ハードウェアI2Cの通信が
+連続して失敗しました。同じピンでソフトウェアI2Cにすると読み戻しに成功し、
+**0.2.33 + ソフトウェアI2Cで初期化・描画に成功、ユーザーもHello Worldの実表示を確認済み**です。
+ACK電圧の実測や、ハードウェアI2Cの内部状態が失敗する詳細は未確認です。
+[調査結果と比較手順](diagnostics/README.md)を参照してください。
+Avatar版の依存ライブラリは現時点では0.2.32のままです。
+
+ModuleDisplayのDC入力仕様は**9〜24V**です。給電ケーブルの接続だけでなく、アダプターの
+出力電圧とモジュールの電源スイッチも確認してください。
 
 ```sh
 pio run -e m5stack-cores3-hello
@@ -19,6 +38,9 @@ pio run -e m5stack-cores3-hello
 Webツールで`↻`を押し、名前に`m5stack-cores3-hello`を含む新しいbinを選んで、
 Board=`CoreS3`で書き込みます。Monitorを開始してDevice Resetすると、
 `TEST: ModuleDisplay Hello World (M5GFX only)`と、成功時には`HelloWorld: text drawn on HDMI ...`が記録されます。
+修正版は`HDMI test: M5GFX 0.2.33 / transmitter ACK fix #339`でも識別できます。
+さらに`HDMI test: software I2C port=-1 SDA=12 SCL=11`が表示されます。
+Hello World版はファイルシステムを使用しないため、結合binにはSPIFFSを含めません。
 初期化に失敗した場合は`HelloWorld: HDMI initialization failed; text was not drawn.`と表示します。
 描画完了ログだけではモニター上の表示までは確認できないため、実際の映像も確認してください。
 
@@ -63,7 +85,8 @@ CoreS3のPSRAMはQuad接続のため、`board_build.arduino.memory_type = qio_qs
 `qio_opi`ではPSRAMの初期化に失敗します。設定変更後は上記の`pio run ... -t upload`でブートローダーとアプリを再書き込みしてください。
 HDMI信号の60Hzとアバターの更新速度は別です。描画は最大約15fpsに制限し、実際の更新速度はSPI転送・描画時間に依存します。
 
-既存の`scripts/copy_firmware.py`も使用します。ビルド後にSPIFFSを含む結合ファームウェアが`.pio_build_firmware/`へ保存されます。
+既存の`scripts/copy_firmware.py`も使用します。ビルド後に結合ファームウェアが`.pio_build_firmware/`へ保存されます。
+Avatar版はSPIFFSを含み、ファイルシステムを使用しないHello World版は含みません。
 `data/`は現在空で、追加の画像・音声ファイルは不要です。
 
 ### HDMIが表示されない場合

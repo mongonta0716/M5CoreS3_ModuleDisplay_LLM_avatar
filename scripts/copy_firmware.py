@@ -6,6 +6,8 @@ from SCons.Script import COMMAND_LINE_TARGETS
 import shutil
 import subprocess
 
+bundle_filesystem = env.GetProjectOption("custom_bundle_filesystem", "yes").lower() != "no"
+
 
 def get_repository_name(project_dir: Path) -> str:
     """Gitリポジトリのルートディレクトリ名を取得する。"""
@@ -115,11 +117,9 @@ def create_merged_image(
             int(env.subst("$ESP32_APP_OFFSET"), 0),
             firmware_path,
         ),
-        (
-            int(env["FS_START"]),
-            filesystem_path,
-        ),
     ]
+    if bundle_filesystem:
+        images.append((int(env["FS_START"]), filesystem_path))
     images.extend(
         (
             int(str(address), 0),
@@ -165,7 +165,7 @@ def copy_firmware(source, target, env):
 firmware_path = env.subst("$BUILD_DIR/${PROGNAME}.bin")
 
 filesystem_targets = {"buildfs", "uploadfs", "uploadfsota"}
-if not filesystem_targets.intersection(COMMAND_LINE_TARGETS):
+if bundle_filesystem and not filesystem_targets.intersection(COMMAND_LINE_TARGETS):
     filesystem_image = env.DataToBin(
         env.subst("$BUILD_DIR/${ESP32_FS_IMAGE_NAME}"),
         env.subst("$PROJECT_DATA_DIR"),

@@ -21,6 +21,16 @@ void probe(int port, uint32_t frequency, const char* name) {
                   result.has_value() ? "OK" : "FAIL",
                   result.has_error() ? static_cast<int>(result.error()) : 0);
     delay(2);
+    // Read the page contents even if selection reported an error. An ACK
+    // error alone does not tell us whether the transmitter accepted the bank.
+    for (uint8_t reg : {0x00, 0x01, 0x02, 0x03, 0x15, 0xea, 0xeb}) {
+      uint8_t value = 0;
+      const auto read = lgfx::i2c::transactionWriteRead(
+          port, kAddress, &reg, 1, &value, 1, frequency);
+      Serial.printf("HDMI diag: %s requested-bank=%02x reg=%02x value=%02x read=%s error=%d\n",
+                    name, bank, reg, value, read.has_value() ? "OK" : "FAIL",
+                    read.has_error() ? static_cast<int>(read.error()) : 0);
+    }
   }
 
   const uint8_t enableId[] = {0xee, 0x01};

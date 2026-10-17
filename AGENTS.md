@@ -11,6 +11,14 @@ connected to another Mac and flashed/monitored through the browser using
 `/Users/mongonta555/work/web_flash_tool`. A missing local USB port does not mean
 the user's device is disconnected from their browser Mac.
 
+As of 2026-10-17, the Hello World environment uses M5GFX 0.2.33 and software
+I2C (port -1) through `src/CoreS3ModuleDisplay.h`. The pins, SPI configuration,
+and video timing match stock M5ModuleDisplay. The user confirmed visible
+Hello World output with this combination. `m5stack-cores3-hdmi-hw` runs the stock
+hardware-I2C path; `m5stack-cores3-hdmi-diag` adds page-content readback after
+failed initialization. Neither is the default. Hello World does not bundle
+unused SPIFFS; Avatar still does. See `diagnostics/README.md` for evidence.
+
 The Web Flash Tool automatically saves logs when the browser's Monitor runs.
 Read `/Users/mongonta555/work/web_flash_tool/AGENTS.md` for the log format and
 workflow. The most recently updated saved session can be read with:
