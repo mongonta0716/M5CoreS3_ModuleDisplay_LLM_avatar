@@ -40,4 +40,7 @@ class DualDisplayAvatar {
   uint32_t lastBlink_ = 0;
   uint32_t blinkInterval_ = 2500;
   bool mouthDemo_ = false;
+  uint32_t lastPerfAt_ = 0;
+  uint32_t perfFrames_ = 0;
+  uint64_t perfDrawUs_ = 0;
 };

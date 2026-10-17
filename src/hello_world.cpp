@@ -1,4 +1,5 @@
 #include <M5ModuleDisplay.h>
+#include "AppConfig.h"
 #ifdef HDMI_SOFTWARE_I2C
 #include "CoreS3ModuleDisplay.h"
 #endif
@@ -8,20 +9,47 @@
 #ifdef HELLO_THEN_AVATAR
 #include "DualDisplayAvatar.h"
 #include "HdmiChime.h"
+#include "MicLipSync.h"
 #endif
 
 namespace {
 #ifdef HDMI_SOFTWARE_I2C
 CoreS3ModuleDisplay display(-1);
 #else
-M5ModuleDisplay display;
+M5ModuleDisplay display(app::kLogicalWidth, app::kLogicalHeight, 60,
+                        1280, 720, app::kDisplayScale, app::kDisplayScale, 74250000);
 #endif
 #ifdef HELLO_THEN_AVATAR
 DualDisplayAvatar avatar;
 bool avatarReady = false;
 constexpr uint32_t kHelloDurationMs = 2000;
 HdmiChime chime;
+MicLipSync lipSync;
+bool chimeActive = false;
+uint32_t chimeStartedAt = 0;
 constexpr uint16_t kTouchButtonHeight = 40;
+
+void playChime(const char* source) {
+  // CoreS3 mic MCLK and HDMI LRCK share GPIO0 and I2S1; use them in turn.
+  lipSync.pause();
+  avatar.setMouthOpenRatio(0);
+  chimeActive = chime.begin() && chime.play(source);
+  chimeStartedAt = millis();
+  if (!chimeActive) {
+    chime.end();
+    lipSync.begin();
+  }
+}
+
+void updateAudio() {
+  // PCM is 340 ms; allow DMA tail / HDMI output to finish before releasing I2S.
+  if (chimeActive && millis() - chimeStartedAt >= 450 && !chime.isPlaying()) {
+    chime.end();
+    chimeActive = false;
+    lipSync.begin();
+  }
+  lipSync.logStats(millis());
+}
 
 void drawTouchButtons() {
   auto& lcd = M5.Display;
@@ -43,7 +71,7 @@ void drawTouchButtons() {
 
 void initTouchButtons() {
   auto cfg = M5.config();
-  cfg.internal_mic = false;
+  cfg.internal_mic = true;  // Configure CoreS3 pins and ES7210 enable callback.
   cfg.internal_spk = false;
   cfg.internal_imu = false;
   cfg.internal_rtc = false;
@@ -69,11 +97,12 @@ void initTouchButtons() {
 void updateTouchButtons() {
   M5.update();
   if (M5.BtnA.wasPressed()) {
-    chime.play("BtnA");
+    playChime("BtnA");
     drawTouchButtons();
   } else if (M5.BtnA.wasReleased()) {
     drawTouchButtons();
   }
+  updateAudio();
 }
 
 void startAvatar(bool hdmiAvailable) {
@@ -96,7 +125,7 @@ void startAvatar(bool hdmiAvailable) {
 void setup() {
   Serial.begin(115200);
 #ifdef HELLO_THEN_AVATAR
-  Serial.println("\nAPP: Hello World -> Avatar (CoreS3 + HDMI)");
+  Serial.println("\nAPP: Hello World -> Avatar (CoreS3 + HDMI + mic FFT)");
 #else
   Serial.println("\nTEST: ModuleDisplay Hello World (M5GFX only)");
 #endif
@@ -117,23 +146,25 @@ void setup() {
     diagnoseHdmiI2c();
 #endif
 #ifdef HELLO_THEN_AVATAR
+    lipSync.begin();
     startAvatar(false);
 #endif
     return;
   }
 
+  Serial.printf("HDMI: output 1280x720@60, logical %dx%d, hardware scale %u\n",
+                display.width(), display.height(), app::kDisplayScale);
   display.fillScreen(TFT_NAVY);
   display.drawRect(0, 0, display.width(), display.height(), TFT_WHITE);
   display.setTextColor(TFT_WHITE, TFT_NAVY);
-  display.setTextSize(6);
+  display.setTextSize(6.0f / app::kDisplayScale);
   display.setTextDatum(middle_center);
   display.drawString("Hello World", display.width() / 2, display.height() / 2);
   Serial.printf("HelloWorld: text drawn on HDMI %dx%d\n",
                 display.width(), display.height());
 #ifdef HELLO_THEN_AVATAR
   const uint32_t helloShownAt = millis();
-  chime.begin();
-  chime.play("startup");
+  playChime("startup");
   while (millis() - helloShownAt < kHelloDurationMs) {
     updateTouchButtons();
     delay(1);
@@ -151,6 +182,7 @@ void loop() {
     while (Serial.available()) {
       avatar.handleCommand(static_cast<char>(Serial.read()));
     }
+    avatar.setMouthOpenRatio(lipSync.mouthRatio());
     avatar.update(millis());
   }
   delay(1);

@@ -5,16 +5,50 @@ app in `src/hello_world.cpp`. It shows Hello World for 2000 ms, then renders an
 animated Avatar using `DualDisplayAvatar`. It also initializes CoreS3's LCD and
 touch through `M5.begin()` and uses M5Unified TouchButtons in the bottom 40 px.
 After the splash, CoreS3 shows the same Avatar state in a 320x200 viewport above
-the buttons (about 267x200 face); HDMI keeps the 960x720 face. The renderers share
-one animation state and run sequentially. Per-display clipping protects the
+the buttons (about 267x200 face); HDMI renders a 240x180 face at logical 320x180,
+then ModuleDisplay enlarges it 4x for a 960x720 face on 1280x720@60 output.
+`m5stack-cores3-hello` sets `AVATAR_HDMI_SCALE=4`; the older `m5stack-cores3`
+environment remains at 1. `CoreS3ModuleDisplay` reads dimensions and scale from
+`AppConfig.h` and explicitly configures the 720p output timing/scaling.
+`Avatar perf` logs the completed dual-display FPS and mean draw time every ~5 s.
+The scale-2 build was flashed on 2026-10-17; saved startup/performance capture
+`diagnostics/2026-10-17-hdmi-scale2.log` (ignored) confirms logical 640x360,
+hardware scale 2, a 480x360 HDMI face, both targets ready, and about 5.8 FPS /
+172 ms mean draw time for both displays. The user confirmed normal display,
+motion, BtnA audio and lip-sync resumption with this build.
+The current scale-4 build was subsequently flashed on 2026-10-17; capture
+`diagnostics/2026-10-17-hdmi-scale4.log` (ignored) confirms logical 320x180,
+hardware scale 4, a 240x180 HDMI face, both targets ready, and about 10.3 FPS /
+96.6 ms mean draw time for both displays (about 1.8x the scale-2 FPS).
+The user confirmed normal display, motion, BtnA audio and lip-sync resumption
+with scale 4 too. Hello World uses fractional text scaling to retain its size.
+The renderers share one animation state and run sequentially. Per-display clipping protects the
 buttons and restores the previous clip rectangle after each frame.
 The user confirmed both screens animate correctly and TouchButton A still plays
 the chime. The startup capture is `diagnostics/2026-10-17-dual-avatar.log`
 (ignored by Git).
 BtnA plays a two-note chime through ModuleDisplay HDMI; startup plays it too.
 `HdmiChime` configures a separate Speaker_Class for I2S1, BCK=6, DATA=13, LRCK=0,
-48 kHz stereo. Internal speaker/mic, IMU, RTC and external display autodetection
-are disabled. ModuleDisplay must be externally powered. Custom I2C probes are
+48 kHz stereo. The CoreS3 internal mic is enabled for FFT lip sync; internal
+speaker, IMU, RTC and external display autodetection are disabled.
+`MicLipSync` records 16 kHz stereo, runs avatar-mic's 256-point FFT on released
+buffers, and shares the resulting mouth ratio between both render targets.
+FFT bins 5..60 cover 312.5..3750 Hz. Source and MIT license are vendored in
+`lib/AvatarMicFFT`; native DSP tests are in `tests/test_mic_fft.cpp`.
+CoreS3 mic uses I2S1 (MCLK=0, BCK=34, WS=33, DATA=14), sharing both I2S1 and
+GPIO0 with HDMI audio. Stop/join the mic before starting the HDMI speaker;
+stop the speaker after the chime and DMA tail before restarting the mic.
+Never run both audio drivers concurrently or move just one to another I2S port:
+GPIO0 still conflicts. Capture callbacks only analyze/requeue at the same rate;
+audio lifecycle and rendering stay on the main task. Serial `t` overrides mic
+lip sync with the existing sine-wave mouth demo until toggled off.
+The FFT build was compiled and flashed to the locally attached CoreS3 on
+2026-10-17. `diagnostics/2026-10-17-mic-fft.log` (ignored) confirms startup
+chime queuing, mic startup afterwards, both Avatar targets ready, and continuing
+FFT frames with nonzero PCM/FFT levels. Native DSP tests pass with ASan/UBSan.
+The user subsequently confirmed that lip sync on both displays and BtnA's
+chime/resumption work normally on 2026-10-17.
+ModuleDisplay must be externally powered. Custom I2C probes are
 excluded from the default build. The original dual-display Avatar build remains
 `m5stack-cores3`.
 

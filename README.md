@@ -9,20 +9,31 @@ M5Stack CoreS3にModuleLLMとDisplay Module 13.2をスタックして使う実�
 現在の既定ビルドは`m5stack-cores3-hello`です。
 CoreS3 + ModuleDisplayで、HDMIモニターに紺色背景・白い枠・中央の`Hello World`を
 **2秒間表示してから、アニメーションするAvatarへ切り替えます**。
-Avatarは4:3の顔を960×720で中央表示し、まばたき・視線・呼吸を更新します。
+HDMI側は320×180で描画し、ModuleDisplayで1280×720へ4倍拡大します。
+Avatarは4:3の顔を240×180で描画し、モニター上では960×720の大きさで中央表示します。
+まばたき・視線・呼吸を更新し、等倍描画に比べてHDMIへ転送する画素数を約1/16、
+従来の640×360描画に比べて約1/4に減らします。
 CoreS3本体にも同じ表情・動きのAvatarを表示します。下40ドットのボタン領域を避け、
 上部320×200に約267×200の顔を中央配置します。両画面は共通の状態で順に描画します。
-M5GFXのHDMIドライバーを使用し、`display.init()`と1280×720で確認します。
-`CoreS3ModuleDisplay`は標準`M5ModuleDisplay`と同じピン・SPI・映像設定を使い、
-HDMI送信ICの制御だけをソフトウェアI2C（port=-1、SDA=12、SCL=11）へ切り替えます。
+CoreS3の内蔵マイクを16kHzステレオで録音し、
+[m5stack-avatar-mic](https://github.com/mongonta0716/m5stack-avatar-mic)と同じ256点FFTで
+312.5〜3750Hz（bin 5〜60）の音量を集計して、両画面の口を動かします。
+音量に応じた感度調整と口の開閉の平滑化を行い、無音が続くと口を閉じます。
+M5GFXのHDMIドライバーを使用し、`display.init()`で初期化します。
+`CoreS3ModuleDisplay`は標準`M5ModuleDisplay`と同じピン・SPI設定を使い、
+HDMI送信ICの制御をソフトウェアI2C（port=-1、SDA=12、SCL=11）へ切り替え、
+解像度・拡大率は`AppConfig.h`から設定します。
 CoreS3本体には操作画面を表示します。M5Unifiedの`setTouchButtonHeight(40)`で画面下40ドットを
 A/B/Cのタッチボタン領域にし、左側のAを押すとHDMIモニターから「ピポ」の2音が鳴ります。
 起動時も同じ音を鳴らします。B/Cには現在機能を割り当てていません。
 起動時・A押下時の両方で、ユーザーがモニターからの実際の音を確認済みです。
 HDMI音声は48kHzステレオのI2S（BCK=G6、DATA=G13、LRCK=G0）を使います。
+内蔵マイク（MCLK=G0、BCK=G34、WS=G33、DATA=G14）とHDMI音声はI2S1とG0を共有するため、
+「ピポ」の再生中は録音・口パクを一時停止し、再生後に録音を再開します。
+2026-10-17に、両画面の口パク・Aの発音・再生後の口パク復帰をユーザーが実機確認済みです。
 モニターのスピーカーまたは音声出力を使用し、HDMI入力の音量を有効にしてください。
 既存の`DualDisplayAvatar`とM5Unified-Avatarを使います。`M5.begin()`は本体LCD・タッチのために呼び、
-内蔵スピーカー・マイク・IMU・RTC・自動外部画面初期化は無効にしています。
+内蔵マイクを有効にし、内蔵スピーカー・IMU・RTC・自動外部画面初期化は無効にしています。
 ModuleDisplay側の外部給電が必要です。独自リトライ・追加I2C診断は既定ビルドから外します。
 
 Hello World版はM5GFX **0.2.33**を使用します。0.2.32には、HDMI送信ICへの書き込みが
@@ -48,11 +59,24 @@ pio run -e m5stack-cores3-hello
 
 Webツールで`↻`を押し、名前に`m5stack-cores3-hello`を含む新しいbinを選んで、
 Board=`CoreS3`で書き込みます。Monitorを開始してDevice Resetすると、
-`APP: Hello World -> Avatar (CoreS3 + HDMI)`と、成功時には`HelloWorld: text drawn on HDMI ...`が記録されます。
+`APP: Hello World -> Avatar (CoreS3 + HDMI + mic FFT)`と、成功時には`HelloWorld: text drawn on HDMI ...`が記録されます。
 2秒後に`HelloWorld: held for 2000 ms; starting Avatar`、`Avatar ready: ...`、
 `Avatar: first frame rendered; animation running.`が続きます。
 両画面が利用可能なら`Avatar targets: CoreS3=ready HDMI=ready`も記録されます。
+`HDMI: output 1280x720@60, logical 320x180, hardware scale 4`で拡大設定を確認できます。
+約5秒ごとの`Avatar perf: ... fps, mean draw ... ms (2 displays)`で、
+2画面を一組として実際に更新できた速度と平均描画時間を確認できます。
+変更前の640×360・2倍拡大では2026-10-17の実機で約5.8fps・平均描画時間約172msとなり、表示・動き・Aの発音・
+再生後の口パク復帰をユーザーが確認済みです。
+現在の320×180・4倍拡大では約10.3fps・平均描画時間約96.6msとなり、更新速度は約1.8倍になりました。
+こちらも表示・動き・Aの発音・再生後の口パク復帰をユーザーが実機確認済みです。
 シリアルの`n/h/a/s/d/z`で表情変更、`t`で口パクのデモを切り替えられます。
+通常はマイクのFFTで口パクします。`t`でデモをONにすると周期的な開閉を優先し、OFFでマイクへ戻ります。
+`Mic FFT: ready, 16000 Hz stereo, 256 points, ...`で録音開始、
+毎秒の`Mic FFT: listening frames=... level=... peak=... mouth=...`で処理の継続と音量を確認できます。
+`frames`は解析済みフレーム数、`level`は帯域の振幅合計を2048で割った値、
+`peak`はPCMの最大絶対値、`mouth`は0〜1の口の開きです。
+録音バッファの完了通知でFFTを実行するため、HDMIの描画中も解析を継続します。
 修正版は`HDMI test: M5GFX 0.2.33 / transmitter ACK fix #339`でも識別できます。
 さらに`HDMI test: software I2C port=-1 SDA=12 SCL=11`が表示されます。
 音声の初期化は`HDMI audio: ready, 48000 Hz stereo, ...`、再生要求は
@@ -71,11 +95,13 @@ Avatar版は`pio run -e m5stack-cores3`で引き続きビルドできます。
 - CoreS3: 320×240、ModuleDisplay: HDMI出力1280×720 / 60Hz。
 - 外部画面には4:3の顔を960×720で中央表示。縦横比を維持し、左右に余白を設けます。
 - 両画面で同じ表情・まばたき・視線・呼吸を描画します。
-- CoreS3のタッチで6種類の表情を順に切り替えられます。
+- 内蔵マイクのFFTで両画面のAvatarを口パクさせます（既定ビルド）。
+- 画面下40ドットのAでHDMIの「ピポ」を再生します（既定ビルド）。
+- 従来の`m5stack-cores3`ビルドでは、本体画面のタッチで6種類の表情を順に切り替えます。
 - USBシリアルから表情の変更と口パクのデモを操作できます。
 - ModuleDisplayが検出されない場合も、本体画面は動作します。
 
-ModuleLLMの推論・UART通信・音声処理は次の実装段階です。現在はスタックした状態で表示を確認するためのファームウェアで、ModuleLLMの接続確認は行いません。
+ModuleLLMの推論・UART通信は次の実装段階です。現在の音声解析にはCoreS3内蔵マイクを使い、ModuleLLMの接続確認は行いません。
 
 ## 接続
 
@@ -130,23 +156,27 @@ HDMI初期化が3回失敗した場合は、`HDMI diag:`で追加診断を行い
 
 顔のキャンバスは1bit、転送用バッファは16bit×高さ8ピクセルです。1280×720の16bitフルフレームをCoreS3側には確保しません。
 等倍時、外部画面の正方形キャンバスは960×960で約115,200バイト、転送バッファは15,360バイトです。
-本体画面のキャンバスは12,800バイト、転送バッファは5,120バイトです。キャンバスはPSRAMを利用可能な設定にし、転送バッファは内部RAMに置きます。
+既定の4倍拡大では240×240で7,200バイト、転送バッファは3,840バイトになります。
+本体画面のキャンバスは267×267で約9,078バイト、転送バッファは4,272バイトです。
+キャンバスはPSRAMを利用可能な設定にし、転送バッファは内部RAMに置きます。
 
-メモリ使用量や転送時間を減らしたい場合は、`platformio.ini`の`-DAVATAR_HDMI_SCALE=1`を変更して再ビルドします。
+拡大率を変更する場合は、`platformio.ini`の対象環境の`-DAVATAR_HDMI_SCALE`を変更して再ビルドします。
+既定の`m5stack-cores3-hello`は`4`、従来の`m5stack-cores3`は`1`です。
 
 | 設定 | 論理解像度 | 論理的な顔のサイズ | HDMI出力 |
 | --- | --- | --- | --- |
-| `1`（初期値） | 1280×720 | 960×720 | 1280×720 |
+| `1` | 1280×720 | 960×720 | 1280×720 |
 | `2` | 640×360 | 480×360 | 1280×720、2倍拡大 |
-| `4` | 320×180 | 240×180 | 1280×720、4倍拡大 |
+| `4`（既定ビルド） | 320×180 | 240×180 | 1280×720、4倍拡大 |
 
 低解像度モードではModuleDisplayがハードウェアで拡大します。720pの16:9比率に合わせて論理解像度も16:9にし、その中央に4:3の顔を表示します。
-起動時に外部画面用バッファの確保に失敗した場合は、2倍、4倍の低解像度モードへ順に切り替えて再試行します。HDMI出力は1280×720のままです。
+従来の`m5stack-cores3`ビルドでは、起動時に外部画面用バッファの確保に失敗した場合、2倍、4倍の低解像度モードへ順に切り替えて再試行します。HDMI出力は1280×720のままです。
 すべて失敗した場合や、動作中の再確保に失敗した場合は該当画面の描画を停止してログにエラーを表示し、他の画面の描画を続けます。
 
 ## 操作
 
-本体画面をタッチすると、Neutral → Happy → Angry → Sad → Doubt → Sleepyの順に変化します。
+既定ビルドでは、話しかけると口が動き、下部のAを押すと「ピポ」が鳴ります。
+従来の`m5stack-cores3`ビルドでは、本体画面のタッチでNeutral → Happy → Angry → Sad → Doubt → Sleepyの順に変化します。
 
 | シリアル入力 | 操作 |
 | --- | --- |
@@ -161,6 +191,10 @@ HDMI初期化が3回失敗した場合は、`HDMI diag:`で追加診断を行い
 ## 構成と実装上の注意
 
 - `src/main.cpp`: CoreS3 / ModuleDisplayの初期化、タッチ・USBシリアル入力。
+- `src/hello_world.cpp`: 既定ビルドの起動・タッチ・HDMI音声とマイクの切り替え。
+- `src/MicLipSync.h`: 内蔵マイクの録音、完了通知からのFFT処理。
+- `src/MicFftAnalyzer.h`: FFTの帯域集計、感度調整、口の開閉の平滑化。
+- `lib/AvatarMicFFT`: avatar-micから取り込んだFFTとMITライセンス。
 - `src/AppConfig.h`: HDMIの論理解像度・ハードウェア拡大率。
 - `src/DualDisplayAvatar.*`: 顔の配置、2画面への描画、共通のアニメーション状態。
 
@@ -168,3 +202,13 @@ M5Unified-Avatarはコミット`69e8045bf98f49509611563b9d16ea433c7b8ea7`に固�
 この版の標準コンストラクターには720×1280の固定値があるため、`Face`の詳細コンストラクターで各画面に合ったパーツ配置とキャンバスを渡しています。
 また、`Avatar::start()`の描画タスクハンドルはライブラリ全体で共有されるため、2つの描画タスクを起動せず、共通の`DrawContext`相当の状態を使って`Face::draw()`を順に呼びます。
 これにより、同じSPIバスを使用する本体LCDとModuleDisplayの描画を直列に実行します。ライブラリ本体の変更は不要です。
+
+FFTの単体テストはMac上で次のように実行できます。
+
+```sh
+clang++ -std=c++11 -Wall -Wextra -Werror -fsanitize=address,undefined \
+  -Isrc -Ilib/AvatarMicFFT/src tests/test_mic_fft.cpp -o /tmp/test_mic_fft
+/tmp/test_mic_fft
+```
+
+無音・音声帯域・帯域外・感度の復帰・最大振幅・時刻の周回を検証します。

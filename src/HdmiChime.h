@@ -8,6 +8,7 @@
 class HdmiChime {
  public:
   bool begin() {
+    if (ready_) return true;
     auto cfg = speaker_.config();
     // Same CoreS3 / ModuleDisplay I2S mapping as M5Unified::_begin_audio.
     cfg.pin_bck = 6;
@@ -36,6 +37,13 @@ class HdmiChime {
                                          kSampleRate, false, 1, 0, true);
     Serial.printf("HDMI chime: %s %s\n", source, queued ? "queued" : "failed");
     return queued;
+  }
+
+  bool isPlaying() const { return speaker_.isPlaying(); }
+
+  void end() {
+    speaker_.end();
+    ready_ = false;
   }
 
  private:

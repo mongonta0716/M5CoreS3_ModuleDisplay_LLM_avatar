@@ -127,6 +127,8 @@ void DualDisplayAvatar::handleCommand(char command) {
 void DualDisplayAvatar::update(uint32_t now) {
   if (now - lastFrame_ < app::kFrameIntervalMs) return;
   lastFrame_ = now;
+  const uint32_t drawStartedAt = micros();
+  if (lastPerfAt_ == 0) lastPerfAt_ = millis();
   if (now - lastGaze_ >= 1800) {
     gazeV_ = random(-100, 101) / 100.0f;
     gazeH_ = random(-100, 101) / 100.0f;
@@ -163,5 +165,16 @@ void DualDisplayAvatar::update(uint32_t now) {
     target.display->setClipRect(0, 0, target.display->width(), target.viewportHeight);
     target.face->draw(&context);
     target.display->setClipRect(clipX, clipY, clipW, clipH);
+  }
+  perfDrawUs_ += static_cast<uint32_t>(micros() - drawStartedAt);
+  ++perfFrames_;
+  const uint32_t elapsed = millis() - lastPerfAt_;
+  if (elapsed >= 5000) {
+    Serial.printf("Avatar perf: %.1f fps, mean draw %.1f ms (%u displays)\n",
+                  perfFrames_ * 1000.0f / elapsed,
+                  perfDrawUs_ / (1000.0f * perfFrames_), targetCount_);
+    lastPerfAt_ = millis();
+    perfFrames_ = 0;
+    perfDrawUs_ = 0;
   }
 }

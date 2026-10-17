@@ -2,6 +2,7 @@
 
 #include <M5GFX.h>
 #include <lgfx/v1/panel/Panel_M5HDMI.hpp>
+#include "AppConfig.h"
 
 // M5ModuleDisplay's CoreS3 pin/timing configuration, with an explicit I2C
 // port so software I2C (-1) can be compared without patching the library.
@@ -43,8 +44,14 @@ class CoreS3ModuleDisplay : public M5GFX {
     panel_.setRotation(1);
 
     lgfx::Panel_M5HDMI::config_resolution_t resolution;
-    resolution.logical_width = 1280;
-    resolution.logical_height = 720;
+    resolution.logical_width = app::kLogicalWidth;
+    resolution.logical_height = app::kLogicalHeight;
+    resolution.output_width = 1280;
+    resolution.output_height = 720;
+    resolution.refresh_rate = 60;
+    resolution.scale_w = app::kDisplayScale;
+    resolution.scale_h = app::kDisplayScale;
+    resolution.pixel_clock = 74250000;
     panel_.config_resolution(resolution);
     setPanel(&panel_);
     _board = lgfx::board_t::board_M5ModuleDisplay;
