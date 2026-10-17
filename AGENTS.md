@@ -1,0 +1,47 @@
+# Remote build and hardware verification
+
+The current default PlatformIO environment is `m5stack-cores3-hello`, a standalone
+ModuleDisplay Hello World test in `src/hello_world.cpp`. It uses M5GFX only and
+does not initialize the CoreS3 LCD, touch, or PMIC. ModuleDisplay must be externally
+powered. It excludes M5Unified, Avatar, and custom HDMI diagnostics. The Avatar
+build remains `m5stack-cores3`.
+
+This project is built on the development Mac via VS Code Remote SSH. CoreS3 is
+connected to another Mac and flashed/monitored through the browser using
+`/Users/mongonta555/work/web_flash_tool`. A missing local USB port does not mean
+the user's device is disconnected from their browser Mac.
+
+The Web Flash Tool automatically saves logs when the browser's Monitor runs.
+Read `/Users/mongonta555/work/web_flash_tool/AGENTS.md` for the log format and
+workflow. The most recently updated saved session can be read with:
+
+```sh
+node /Users/mongonta555/work/web_flash_tool/scripts/read_serial_log.js --latest
+```
+
+Logs are in `/Users/mongonta555/work/web_flash_tool/logs/<session-UUID>.jsonl`.
+Check metadata and startup output to associate a session with the correct
+device and firmware. If no logs exist yet, the user must reload the updated
+Web Flash Tool and start Monitor. Saved logs can verify HDMI initialization,
+display registration, and PSRAM allocation; visible HDMI output needs user
+observation or camera evidence. Do not flash/reset hardware or restart the
+server solely to inspect saved logs.
+
+## HDMI investigation evidence (2026-10-16)
+
+- Quad PSRAM configuration (`qio_qspi`) corrected the original PSRAM failure;
+  subsequent logs report about 8 MiB free PSRAM.
+- The user reproduced HDMI initialization failure with ModuleLLM removed and
+  confirmed that both CoreS3 and ModuleDisplay have power connected.
+- Session `dccbb5a1-d1e1-40d7-b4d2-3ee952121302` reports M-Bus output enabled,
+  HDMI chip ID `17 02 e2`, FPGA ID `48440004`, and failure selecting bank `81`.
+  Banks `80`, `82`, and `84` succeed with HW I2C at 100 kHz / 25 kHz and SW I2C
+  at requested 25 kHz. All three methods still read the correct chip ID.
+- `error=2` is M5GFX's generic `connection_lost`, not a precise NACK diagnosis.
+  Do not infer a defective chip, insufficient power, or a hardware-I2C-only bug
+  from this evidence alone. Earlier M-Bus-disabled warnings are not necessary
+  for the failure to occur. Adapter voltage remains unconfirmed.
+- Session `aaf86d20-4989-4110-a36a-86acd4565409` ran the first Hello World test
+  using M5Unified's standard display initialization. It reproduced the bank-81
+  failure with no Avatar linked, before any text could be drawn. The next test
+  removes M5Unified too (startup marker includes `M5GFX only`).
