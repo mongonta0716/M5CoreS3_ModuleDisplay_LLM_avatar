@@ -10,6 +10,8 @@ M5Stack CoreS3にModuleLLMとDisplay Module 13.2をスタックして使う実�
 CoreS3 + ModuleDisplayで、HDMIモニターに紺色背景・白い枠・中央の`Hello World`を
 **2秒間表示してから、アニメーションするAvatarへ切り替えます**。
 Avatarは4:3の顔を960×720で中央表示し、まばたき・視線・呼吸を更新します。
+CoreS3本体にも同じ表情・動きのAvatarを表示します。下40ドットのボタン領域を避け、
+上部320×200に約267×200の顔を中央配置します。両画面は共通の状態で順に描画します。
 M5GFXのHDMIドライバーを使用し、`display.init()`と1280×720で確認します。
 `CoreS3ModuleDisplay`は標準`M5ModuleDisplay`と同じピン・SPI・映像設定を使い、
 HDMI送信ICの制御だけをソフトウェアI2C（port=-1、SDA=12、SCL=11）へ切り替えます。
@@ -46,9 +48,10 @@ pio run -e m5stack-cores3-hello
 
 Webツールで`↻`を押し、名前に`m5stack-cores3-hello`を含む新しいbinを選んで、
 Board=`CoreS3`で書き込みます。Monitorを開始してDevice Resetすると、
-`APP: ModuleDisplay Hello World -> Avatar (HDMI only)`と、成功時には`HelloWorld: text drawn on HDMI ...`が記録されます。
+`APP: Hello World -> Avatar (CoreS3 + HDMI)`と、成功時には`HelloWorld: text drawn on HDMI ...`が記録されます。
 2秒後に`HelloWorld: held for 2000 ms; starting Avatar`、`Avatar ready: ...`、
 `Avatar: first frame rendered; animation running.`が続きます。
+両画面が利用可能なら`Avatar targets: CoreS3=ready HDMI=ready`も記録されます。
 シリアルの`n/h/a/s/d/z`で表情変更、`t`で口パクのデモを切り替えられます。
 修正版は`HDMI test: M5GFX 0.2.33 / transmitter ACK fix #339`でも識別できます。
 さらに`HDMI test: software I2C port=-1 SDA=12 SCL=11`が表示されます。

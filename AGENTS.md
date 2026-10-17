@@ -1,9 +1,16 @@
 # Remote build and hardware verification
 
-The current default PlatformIO environment is `m5stack-cores3-hello`, an HDMI Avatar
+The current default PlatformIO environment is `m5stack-cores3-hello`, a dual-display Avatar
 app in `src/hello_world.cpp`. It shows Hello World for 2000 ms, then renders an
 animated Avatar using `DualDisplayAvatar`. It also initializes CoreS3's LCD and
 touch through `M5.begin()` and uses M5Unified TouchButtons in the bottom 40 px.
+After the splash, CoreS3 shows the same Avatar state in a 320x200 viewport above
+the buttons (about 267x200 face); HDMI keeps the 960x720 face. The renderers share
+one animation state and run sequentially. Per-display clipping protects the
+buttons and restores the previous clip rectangle after each frame.
+The user confirmed both screens animate correctly and TouchButton A still plays
+the chime. The startup capture is `diagnostics/2026-10-17-dual-avatar.log`
+(ignored by Git).
 BtnA plays a two-note chime through ModuleDisplay HDMI; startup plays it too.
 `HdmiChime` configures a separate Speaker_Class for I2S1, BCK=6, DATA=13, LRCK=0,
 48 kHz stereo. Internal speaker/mic, IMU, RTC and external display autodetection

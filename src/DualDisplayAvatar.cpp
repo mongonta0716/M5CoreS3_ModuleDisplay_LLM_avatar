@@ -16,16 +16,17 @@ constexpr const char* kExpressionNames[] = {
     "Neutral", "Happy", "Angry", "Sad", "Doubt", "Sleepy"};
 }  // namespace
 
-bool DualDisplayAvatar::addDisplay(M5GFX& display) {
-  if (targetCount_ >= 2) return false;
+bool DualDisplayAvatar::addDisplay(M5GFX& display, uint16_t reservedBottom) {
+  if (targetCount_ >= 2 || reservedBottom >= display.height()) return false;
+  const int viewportHeight = display.height() - reservedBottom;
   display.setColorDepth(16);
-  display.fillScreen(TFT_BLACK);
+  display.fillRect(0, 0, display.width(), viewportHeight, TFT_BLACK);
 
   const float scale = std::min(display.width() / float(kSourceWidth),
-                               display.height() / float(kSourceHeight));
+                               viewportHeight / float(kSourceHeight));
   const int size = lroundf(kSourceWidth * scale);
   // Face::draw uses a square rotation canvas. Center the 4:3 face in that
-  // square, then clip its unused top/bottom to the physical display.
+  // square, then clip its unused top/bottom to the display's avatar viewport.
   const int contentHeight = lroundf(kSourceHeight * scale);
   const int paddingY = (size - contentHeight) / 2;
   auto position = [scale, paddingY](int top, int left) {
@@ -56,6 +57,8 @@ bool DualDisplayAvatar::addDisplay(M5GFX& display) {
   auto& target = targets_[targetCount_];
   target.canvas = canvas.get();
   target.strip = strip.get();
+  target.display = &display;
+  target.viewportHeight = viewportHeight;
   target.size = size;
   target.scale = scale;
   target.face.reset(new m5avatar::Face(
@@ -65,7 +68,7 @@ bool DualDisplayAvatar::addDisplay(M5GFX& display) {
       new m5avatar::Eye(dimension(8), true), position(96, 230),
       new m5avatar::Eyeblow(dimension(32), 0, false), position(67, 96),
       new m5avatar::Eyeblow(dimension(32), 0, true), position(72, 230),
-      new m5avatar::BoundingRect((display.height() - size) / 2,
+      new m5avatar::BoundingRect((viewportHeight - size) / 2,
                                  (display.width() - size) / 2, size, size),
       canvas.release(), strip.release()));
   target.ready = true;
@@ -73,6 +76,10 @@ bool DualDisplayAvatar::addDisplay(M5GFX& display) {
   Serial.printf("Avatar ready: %dx%d, face %dx%d, 1-bit canvas %u bytes\n",
                 display.width(), display.height(), size, contentHeight,
                 static_cast<unsigned>(((size + 7) / 8) * size));
+  if (reservedBottom) {
+    Serial.printf("Avatar viewport: %dx%d; bottom %u px reserved for buttons\n",
+                  display.width(), viewportHeight, reservedBottom);
+  }
   return true;
 }
 
@@ -151,6 +158,10 @@ void DualDisplayAvatar::update(uint32_t now) {
         expression_, breath * target.scale, &palette_, gaze, eyes, gaze, eyes,
         mouth, "", 0.0f, 1.0f, 1, m5avatar::BatteryIconStatus::invisible, 0,
         nullptr);
+    int32_t clipX, clipY, clipW, clipH;
+    target.display->getClipRect(&clipX, &clipY, &clipW, &clipH);
+    target.display->setClipRect(0, 0, target.display->width(), target.viewportHeight);
     target.face->draw(&context);
+    target.display->setClipRect(clipX, clipY, clipW, clipH);
   }
 }

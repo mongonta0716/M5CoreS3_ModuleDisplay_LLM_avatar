@@ -21,10 +21,11 @@ DualDisplayAvatar avatar;
 bool avatarReady = false;
 constexpr uint32_t kHelloDurationMs = 2000;
 HdmiChime chime;
+constexpr uint16_t kTouchButtonHeight = 40;
 
 void drawTouchButtons() {
   auto& lcd = M5.Display;
-  const int top = lcd.height() - 40;
+  const int top = lcd.height() - kTouchButtonHeight;
   lcd.setTextDatum(middle_center);
   lcd.setTextSize(2);
   for (int i = 0; i < 3; ++i) {
@@ -32,11 +33,11 @@ void drawTouchButtons() {
     const int right = (i + 1) * lcd.width() / 3;
     const uint16_t color = i == 0 ? (M5.BtnA.isPressed() ? TFT_BLUE : TFT_NAVY)
                                    : TFT_DARKGREY;
-    lcd.fillRect(left, top, right - left, 40, color);
-    lcd.drawRect(left, top, right - left, 40, TFT_WHITE);
+    lcd.fillRect(left, top, right - left, kTouchButtonHeight, color);
+    lcd.drawRect(left, top, right - left, kTouchButtonHeight, TFT_WHITE);
     lcd.setTextColor(TFT_WHITE, color);
     lcd.drawString(i == 0 ? "A: PiPo" : (i == 1 ? "B" : "C"),
-                   (left + right) / 2, top + 20);
+                   (left + right) / 2, top + kTouchButtonHeight / 2);
   }
 }
 
@@ -53,7 +54,7 @@ void initTouchButtons() {
   M5.begin(cfg);
   M5.Display.setRotation(1);
   M5.Display.setBrightness(128);
-  M5.setTouchButtonHeight(40);
+  M5.setTouchButtonHeight(kTouchButtonHeight);
   M5.Display.fillScreen(TFT_BLACK);
   M5.Display.setTextDatum(middle_center);
   M5.Display.setTextSize(2);
@@ -74,13 +75,28 @@ void updateTouchButtons() {
     drawTouchButtons();
   }
 }
+
+void startAvatar(bool hdmiAvailable) {
+  const bool coreReady = avatar.addDisplay(M5.Display, kTouchButtonHeight);
+  const bool hdmiReady = hdmiAvailable && avatar.addDisplay(display);
+  avatarReady = coreReady || hdmiReady;
+  Serial.printf("Avatar targets: CoreS3=%s HDMI=%s\n",
+                coreReady ? "ready" : "unavailable", hdmiReady ? "ready" : "unavailable");
+  if (avatarReady) {
+    avatar.update(millis());
+    Serial.println("Avatar: first frame rendered; animation running.");
+    Serial.println("Serial: n/h/a/s/d/z (expression), t (mouth demo).");
+  } else {
+    Serial.println("ERROR: Avatar initialization failed.");
+  }
+}
 #endif
 }
 
 void setup() {
   Serial.begin(115200);
 #ifdef HELLO_THEN_AVATAR
-  Serial.println("\nAPP: ModuleDisplay Hello World -> Avatar (HDMI only)");
+  Serial.println("\nAPP: Hello World -> Avatar (CoreS3 + HDMI)");
 #else
   Serial.println("\nTEST: ModuleDisplay Hello World (M5GFX only)");
 #endif
@@ -99,6 +115,9 @@ void setup() {
     Serial.println("HelloWorld: HDMI initialization failed; text was not drawn.");
 #ifdef HDMI_READBACK_DIAGNOSTICS
     diagnoseHdmiI2c();
+#endif
+#ifdef HELLO_THEN_AVATAR
+    startAvatar(false);
 #endif
     return;
   }
@@ -121,14 +140,7 @@ void setup() {
   }
   Serial.printf("HelloWorld: held for %u ms; starting Avatar\n",
                 static_cast<unsigned>(millis() - helloShownAt));
-  avatarReady = avatar.addDisplay(display);
-  if (avatarReady) {
-    avatar.update(millis());
-    Serial.println("Avatar: first frame rendered; animation running.");
-    Serial.println("Serial: n/h/a/s/d/z (expression), t (mouth demo).");
-  } else {
-    Serial.println("ERROR: Avatar initialization failed.");
-  }
+  startAvatar(true);
 #endif
 }
 

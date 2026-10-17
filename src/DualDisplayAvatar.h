@@ -8,7 +8,7 @@
 // Avatar::start() uses a global draw-task handle, unsuitable for two instances.
 class DualDisplayAvatar {
  public:
-  bool addDisplay(M5GFX& display);
+  bool addDisplay(M5GFX& display, uint16_t reservedBottom = 0);
   void update(uint32_t now);
   void nextExpression();
   void handleCommand(char command);
@@ -21,6 +21,8 @@ class DualDisplayAvatar {
     // Face owns the canvases; keep these pointers only to check allocations.
     M5Canvas* canvas = nullptr;
     M5Canvas* strip = nullptr;
+    M5GFX* display = nullptr;
+    int viewportHeight = 0;
     int size = 0;
     float scale = 1.0f;
     bool ready = false;
