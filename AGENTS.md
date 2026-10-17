@@ -1,10 +1,12 @@
 # Remote build and hardware verification
 
-The current default PlatformIO environment is `m5stack-cores3-hello`, a standalone
-ModuleDisplay Hello World test in `src/hello_world.cpp`. It uses M5GFX only and
-does not initialize the CoreS3 LCD, touch, or PMIC. ModuleDisplay must be externally
-powered. It excludes M5Unified, Avatar, and custom HDMI diagnostics. The Avatar
-build remains `m5stack-cores3`.
+The current default PlatformIO environment is `m5stack-cores3-hello`, an HDMI-only
+app in `src/hello_world.cpp`. It shows Hello World for 2000 ms, then renders an
+animated Avatar using `DualDisplayAvatar`. M5Unified is a library dependency of
+Avatar, but `M5.begin()` is not called: CoreS3 LCD, touch, and PMIC are not
+initialized. ModuleDisplay must be externally powered. Custom I2C probes are
+excluded from the default build. The original dual-display Avatar build remains
+`m5stack-cores3`.
 
 This project is built on the development Mac via VS Code Remote SSH. CoreS3 is
 connected to another Mac and flashed/monitored through the browser using
@@ -17,7 +19,15 @@ and video timing match stock M5ModuleDisplay. The user confirmed visible
 Hello World output with this combination. `m5stack-cores3-hdmi-hw` runs the stock
 hardware-I2C path; `m5stack-cores3-hdmi-diag` adds page-content readback after
 failed initialization. Neither is the default. Hello World does not bundle
-unused SPIFFS; Avatar still does. See `diagnostics/README.md` for evidence.
+unused SPIFFS; the original dual-display Avatar build still does. See
+`diagnostics/README.md` for evidence.
+The current HDMI-only Avatar uses the same software-I2C configuration and no
+filesystem assets. The user subsequently connected CoreS3 directly to this
+MacBook; its observed port was `/dev/cu.usbmodem114301`. Enumerate ports before
+using it, since the name can change.
+The user also confirmed the Hello World to Avatar transition and visible
+animation on HDMI. The serial capture is
+`diagnostics/2026-10-17-hello-then-avatar.log` (ignored by Git).
 
 The Web Flash Tool automatically saves logs when the browser's Monitor runs.
 Read `/Users/mongonta555/work/web_flash_tool/AGENTS.md` for the log format and

@@ -5,7 +5,7 @@
 
 // M5ModuleDisplay's CoreS3 pin/timing configuration, with an explicit I2C
 // port so software I2C (-1) can be compared without patching the library.
-class CoreS3ModuleDisplay : public lgfx::LGFX_Device {
+class CoreS3ModuleDisplay : public M5GFX {
  public:
   explicit CoreS3ModuleDisplay(int i2cPort) {
     auto spi = bus_.config();
@@ -47,6 +47,14 @@ class CoreS3ModuleDisplay : public lgfx::LGFX_Device {
     resolution.logical_height = 720;
     panel_.config_resolution(resolution);
     setPanel(&panel_);
+    _board = lgfx::board_t::board_M5ModuleDisplay;
+  }
+
+ protected:
+  bool init_impl(bool use_reset, bool use_clear) override {
+    // The panel is configured explicitly; skip CoreS3 autodetection and its
+    // built-in LCD / power setup, while exposing M5GFX to the Avatar library.
+    return lgfx::LGFX_Device::init_impl(use_reset, use_clear);
   }
 
  private:

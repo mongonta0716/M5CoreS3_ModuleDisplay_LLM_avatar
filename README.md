@@ -4,15 +4,18 @@ M5Stack CoreS3にModuleLLMとDisplay Module 13.2をスタックして使う実�
 最初の段階として、CoreS3本体とHDMIモニターの両方にアバターを表示します。
 アバターには指定の[M5Unified-Avatar](https://github.com/mongonta0716/M5Unified-Avatar)を使用しています。
 
-## 現在の切り分け: ModuleDisplay Hello World
+## 現在の既定動作: Hello World → Avatar
 
 現在の既定ビルドは`m5stack-cores3-hello`です。
-CoreS3 + ModuleDisplayで、外部画面だけに紺色背景・白い枠・中央の`Hello World`を表示します。
+CoreS3 + ModuleDisplayで、HDMIモニターに紺色背景・白い枠・中央の`Hello World`を
+**2秒間表示してから、アニメーションするAvatarへ切り替えます**。
+Avatarは4:3の顔を960×720で中央表示し、まばたき・視線・呼吸を更新します。
 M5GFXのHDMIドライバーを使用し、`display.init()`と1280×720で確認します。
 `CoreS3ModuleDisplay`は標準`M5ModuleDisplay`と同じピン・SPI・映像設定を使い、
 HDMI送信ICの制御だけをソフトウェアI2C（port=-1、SDA=12、SCL=11）へ切り替えます。
 CoreS3本体LCD・タッチ・電源管理の初期化は行いません。ModuleDisplay側の外部給電が必要です。
-M5Unified・Avatar・独自リトライ・追加I2C診断はビルド対象から外します。
+既存の`DualDisplayAvatar`とM5Unified-Avatarを使います。依存するM5Unifiedはリンクしますが、
+`M5.begin()`は呼び出しません。独自リトライ・追加I2C診断は既定ビルドから外します。
 
 Hello World版はM5GFX **0.2.33**を使用します。0.2.32には、HDMI送信ICへの書き込みが
 失敗扱いになると初期化シーケンスを途中で打ち切る処理があります。
@@ -26,7 +29,7 @@ Hello World版はM5GFX **0.2.33**を使用します。0.2.32には、HDMI送信I
 **0.2.33 + ソフトウェアI2Cで初期化・描画に成功、ユーザーもHello Worldの実表示を確認済み**です。
 ACK電圧の実測や、ハードウェアI2Cの内部状態が失敗する詳細は未確認です。
 [調査結果と比較手順](diagnostics/README.md)を参照してください。
-Avatar版の依存ライブラリは現時点では0.2.32のままです。
+従来の2画面Avatar版（`m5stack-cores3`）の依存ライブラリは現時点では0.2.32のままです。
 
 ModuleDisplayのDC入力仕様は**9〜24V**です。給電ケーブルの接続だけでなく、アダプターの
 出力電圧とモジュールの電源スイッチも確認してください。
@@ -37,7 +40,10 @@ pio run -e m5stack-cores3-hello
 
 Webツールで`↻`を押し、名前に`m5stack-cores3-hello`を含む新しいbinを選んで、
 Board=`CoreS3`で書き込みます。Monitorを開始してDevice Resetすると、
-`TEST: ModuleDisplay Hello World (M5GFX only)`と、成功時には`HelloWorld: text drawn on HDMI ...`が記録されます。
+`APP: ModuleDisplay Hello World -> Avatar (HDMI only)`と、成功時には`HelloWorld: text drawn on HDMI ...`が記録されます。
+2秒後に`HelloWorld: held for 2000 ms; starting Avatar`、`Avatar ready: ...`、
+`Avatar: first frame rendered; animation running.`が続きます。
+シリアルの`n/h/a/s/d/z`で表情変更、`t`で口パクのデモを切り替えられます。
 修正版は`HDMI test: M5GFX 0.2.33 / transmitter ACK fix #339`でも識別できます。
 さらに`HDMI test: software I2C port=-1 SDA=12 SCL=11`が表示されます。
 Hello World版はファイルシステムを使用しないため、結合binにはSPIFFSを含めません。
