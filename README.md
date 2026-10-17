@@ -13,9 +13,15 @@ Avatarは4:3の顔を960×720で中央表示し、まばたき・視線・呼吸
 M5GFXのHDMIドライバーを使用し、`display.init()`と1280×720で確認します。
 `CoreS3ModuleDisplay`は標準`M5ModuleDisplay`と同じピン・SPI・映像設定を使い、
 HDMI送信ICの制御だけをソフトウェアI2C（port=-1、SDA=12、SCL=11）へ切り替えます。
-CoreS3本体LCD・タッチ・電源管理の初期化は行いません。ModuleDisplay側の外部給電が必要です。
-既存の`DualDisplayAvatar`とM5Unified-Avatarを使います。依存するM5Unifiedはリンクしますが、
-`M5.begin()`は呼び出しません。独自リトライ・追加I2C診断は既定ビルドから外します。
+CoreS3本体には操作画面を表示します。M5Unifiedの`setTouchButtonHeight(40)`で画面下40ドットを
+A/B/Cのタッチボタン領域にし、左側のAを押すとHDMIモニターから「ピポ」の2音が鳴ります。
+起動時も同じ音を鳴らします。B/Cには現在機能を割り当てていません。
+起動時・A押下時の両方で、ユーザーがモニターからの実際の音を確認済みです。
+HDMI音声は48kHzステレオのI2S（BCK=G6、DATA=G13、LRCK=G0）を使います。
+モニターのスピーカーまたは音声出力を使用し、HDMI入力の音量を有効にしてください。
+既存の`DualDisplayAvatar`とM5Unified-Avatarを使います。`M5.begin()`は本体LCD・タッチのために呼び、
+内蔵スピーカー・マイク・IMU・RTC・自動外部画面初期化は無効にしています。
+ModuleDisplay側の外部給電が必要です。独自リトライ・追加I2C診断は既定ビルドから外します。
 
 Hello World版はM5GFX **0.2.33**を使用します。0.2.32には、HDMI送信ICへの書き込みが
 失敗扱いになると初期化シーケンスを途中で打ち切る処理があります。
@@ -46,6 +52,11 @@ Board=`CoreS3`で書き込みます。Monitorを開始してDevice Resetする�
 シリアルの`n/h/a/s/d/z`で表情変更、`t`で口パクのデモを切り替えられます。
 修正版は`HDMI test: M5GFX 0.2.33 / transmitter ACK fix #339`でも識別できます。
 さらに`HDMI test: software I2C port=-1 SDA=12 SCL=11`が表示されます。
+音声の初期化は`HDMI audio: ready, 48000 Hz stereo, ...`、再生要求は
+`HDMI chime: startup queued` / `HDMI chime: BtnA queued`で確認できます。
+ログは音の再生要求までを示し、実際に鳴ったかはモニター側で確認してください。
+HDMIキャプチャーをQuickTime経由で聞く場合は、QuickTime/macOSの音声出力先も確認してください。
+2026-10-17の無音報告は出力先の設定が原因で、設定変更後に発音を確認しました。
 Hello World版はファイルシステムを使用しないため、結合binにはSPIFFSを含めません。
 初期化に失敗した場合は`HelloWorld: HDMI initialization failed; text was not drawn.`と表示します。
 描画完了ログだけではモニター上の表示までは確認できないため、実際の映像も確認してください。

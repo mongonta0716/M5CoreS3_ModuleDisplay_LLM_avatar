@@ -1,10 +1,13 @@
 # Remote build and hardware verification
 
-The current default PlatformIO environment is `m5stack-cores3-hello`, an HDMI-only
+The current default PlatformIO environment is `m5stack-cores3-hello`, an HDMI Avatar
 app in `src/hello_world.cpp`. It shows Hello World for 2000 ms, then renders an
-animated Avatar using `DualDisplayAvatar`. M5Unified is a library dependency of
-Avatar, but `M5.begin()` is not called: CoreS3 LCD, touch, and PMIC are not
-initialized. ModuleDisplay must be externally powered. Custom I2C probes are
+animated Avatar using `DualDisplayAvatar`. It also initializes CoreS3's LCD and
+touch through `M5.begin()` and uses M5Unified TouchButtons in the bottom 40 px.
+BtnA plays a two-note chime through ModuleDisplay HDMI; startup plays it too.
+`HdmiChime` configures a separate Speaker_Class for I2S1, BCK=6, DATA=13, LRCK=0,
+48 kHz stereo. Internal speaker/mic, IMU, RTC and external display autodetection
+are disabled. ModuleDisplay must be externally powered. Custom I2C probes are
 excluded from the default build. The original dual-display Avatar build remains
 `m5stack-cores3`.
 
@@ -21,13 +24,25 @@ hardware-I2C path; `m5stack-cores3-hdmi-diag` adds page-content readback after
 failed initialization. Neither is the default. Hello World does not bundle
 unused SPIFFS; the original dual-display Avatar build still does. See
 `diagnostics/README.md` for evidence.
-The current HDMI-only Avatar uses the same software-I2C configuration and no
+The current HDMI Avatar uses the same software-I2C configuration and no
 filesystem assets. The user subsequently connected CoreS3 directly to this
 MacBook; its observed port was `/dev/cu.usbmodem114301`. Enumerate ports before
 using it, since the name can change.
 The user also confirmed the Hello World to Avatar transition and visible
 animation on HDMI. The serial capture is
 `diagnostics/2026-10-17-hello-then-avatar.log` (ignored by Git).
+Touch shares SDA=12/SCL=11 with HDMI control. `CoreS3ModuleDisplay::init_impl`
+explicitly initializes software I2C and restores the pin routing afterwards so
+CoreS3's hardware-I2C touch polling remains usable. Keep HDMI out of automatic
+M5Unified display registration so the CoreS3 display remains the touch source.
+The user confirmed audible HDMI chimes both at startup and on TouchButton A
+on 2026-10-17. Startup/touch/audio initialization logs are saved in
+`diagnostics/2026-10-17-hdmi-chime-touch.log` (ignored by Git).
+A later silent-audio report was resolved by correcting the macOS/QuickTime
+audio output destination. During investigation, BtnA requests and PCM consumption
+worked; PCNT measured LRCK about 48 kHz and BCK about 1.536 MHz at the CoreS3
+pads. The user confirmed sound after correcting the output destination.
+Temporary test-tone, PCNT and EDID diagnostics were removed from the app.
 
 The Web Flash Tool automatically saves logs when the browser's Monitor runs.
 Read `/Users/mongonta555/work/web_flash_tool/AGENTS.md` for the log format and

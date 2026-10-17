@@ -54,7 +54,18 @@ class CoreS3ModuleDisplay : public M5GFX {
   bool init_impl(bool use_reset, bool use_clear) override {
     // The panel is configured explicitly; skip CoreS3 autodetection and its
     // built-in LCD / power setup, while exposing M5GFX to the Avatar library.
-    return lgfx::LGFX_Device::init_impl(use_reset, use_clear);
+    const int port = panel_.config_transmitter().i2c_port;
+    if (port >= 0) {
+      return lgfx::LGFX_Device::init_impl(use_reset, use_clear);
+    }
+    // CoreS3 touch shares SDA/SCL. Explicitly initialize the software port
+    // even when the HW port already uses these pins, then restore its routing.
+    lgfx::gpio::pin_backup_t pins[] = {12, 11};
+    const bool busReady = lgfx::i2c::init(port, 12, 11).has_value();
+    const bool ready = busReady && lgfx::LGFX_Device::init_impl(use_reset, use_clear);
+    lgfx::i2c::release(port);
+    for (auto& pin : pins) pin.restore();
+    return ready;
   }
 
  private:
