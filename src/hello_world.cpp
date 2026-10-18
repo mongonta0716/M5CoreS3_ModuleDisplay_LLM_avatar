@@ -9,9 +9,13 @@
 #ifdef HELLO_THEN_AVATAR
 #include "DualDisplayAvatar.h"
 #include "HdmiChime.h"
+#ifdef MODULELLM_VOWELS
+#include "ModuleLlmLipSync.h"
+#else
 #include "MicLipSync.h"
 #include "VowelCalibration.h"
 #include "VowelCalibrationStore.h"
+#endif
 #endif
 
 namespace {
@@ -26,14 +30,24 @@ DualDisplayAvatar avatar;
 bool avatarReady = false;
 constexpr uint32_t kHelloDurationMs = 2000;
 HdmiChime chime;
+#ifdef MODULELLM_VOWELS
+ModuleLlmLipSync lipSync;
+bool resumePending = false;
+uint32_t resumeAt = 0;
+#else
 MicLipSync lipSync;
 VowelCalibration calibration;
+#endif
 bool chimeActive = false;
 uint32_t chimeStartedAt = 0;
 constexpr uint16_t kTouchButtonHeight = 40;
 
 void playChime(const char* source) {
+#ifndef MODULELLM_VOWELS
   calibration.cancel(millis());
+#else
+  resumePending = false;
+#endif
   // CoreS3 mic MCLK and HDMI LRCK share GPIO0 and I2S1; use them in turn.
   lipSync.pause();
   avatar.setMouthOpenRatio(0);
@@ -50,25 +64,43 @@ void updateAudio() {
   if (chimeActive && millis() - chimeStartedAt >= 450 && !chime.isPlaying()) {
     chime.end();
     chimeActive = false;
+#ifdef MODULELLM_VOWELS
+    resumePending = true; resumeAt = millis() + 200;
+#else
     lipSync.begin();
+#endif
   }
+#ifdef MODULELLM_VOWELS
+  if (resumePending && int32_t(millis() - resumeAt) >= 0) {
+    resumePending = false; lipSync.begin();
+  }
+#endif
   lipSync.logStats(millis());
 }
 
 void startCalibration() {
   if (!avatarReady || chimeActive) return;
+#ifdef MODULELLM_VOWELS
+  lipSync.startCalibration();
+#else
   calibration.start(millis());
+#endif
   Serial.println("Vowel calibration: quiet 2 s, then A/I/U/E/O for 3 s twice each, with 2 s breath breaks; A cancels.");
 }
 
 void resetCalibration() {
+#ifdef MODULELLM_VOWELS
+  lipSync.resetCalibration();
+#else
   const bool saved = vowelStorage::reset();
   lipSync.setVowelModel(VowelModel{});
   calibration.setStatus(saved ? VowelCalibration::Status::Reset :
                                VowelCalibration::Status::SaveFailed, millis());
   Serial.printf("Vowel calibration: reset %s\n", saved ? "complete" : "NVS failed");
+#endif
 }
 
+#ifndef MODULELLM_VOWELS
 void updateCalibration(const VowelFeatures& features) {
   const auto previousStep = calibration.step();
   const auto previousRound = calibration.round();
@@ -99,8 +131,12 @@ void updateCalibration(const VowelFeatures& features) {
                   calibration.status(millis()) == VowelCalibration::Status::Insufficient ? "insufficient" : "unstable");
   }
 }
+#endif
 
 void updateCalibrationBalloon() {
+#ifdef MODULELLM_VOWELS
+  const auto& calibration = lipSync.calibration();
+#endif
   const auto status = calibration.status(millis());
   String title, detail;
   if (calibration.active()) {
@@ -149,7 +185,11 @@ void drawTouchButtons() {
 
 void initTouchButtons() {
   auto cfg = M5.config();
+#ifdef MODULELLM_VOWELS
+  cfg.internal_mic = false;
+#else
   cfg.internal_mic = true;  // Configure CoreS3 pins and ES7210 enable callback.
+#endif
   cfg.internal_spk = false;
   cfg.internal_imu = false;
   cfg.internal_rtc = false;
@@ -245,7 +285,11 @@ void startAvatar(bool hdmiAvailable) {
 void setup() {
   Serial.begin(115200);
 #ifdef HELLO_THEN_AVATAR
+#ifdef MODULELLM_VOWELS
+  Serial.println("\nAPP: Hello World -> Avatar (CoreS3 + HDMI + ModuleLLM UART vowels)");
+#else
   Serial.println("\nAPP: Hello World -> Avatar (CoreS3 + HDMI + mic FFT)");
+#endif
 #else
   Serial.println("\nTEST: ModuleDisplay Hello World (M5GFX only)");
 #endif
@@ -259,7 +303,11 @@ void setup() {
   // Initialize CoreS3 touch/LCD before the separate software-I2C HDMI path.
   initTouchButtons();
   if (!logTouchHealth("before HDMI")) recoverTouch();
+#ifdef MODULELLM_VOWELS
+  lipSync.begin();
+#else
   lipSync.setVowelModel(vowelStorage::load());
+#endif
 #endif
   // ModuleDisplay is externally powered and initialized separately.
   if (!display.init()) {
@@ -312,7 +360,9 @@ void loop() {
       else avatar.handleCommand(command);
     }
     const auto features = lipSync.vowelFeatures();
+#ifndef MODULELLM_VOWELS
     updateCalibration(features);
+#endif
     avatar.setMouthOpenRatio(lipSync.mouthRatio());
     avatar.setVowel(features.vowel, features.confidence);
     updateCalibrationBalloon();

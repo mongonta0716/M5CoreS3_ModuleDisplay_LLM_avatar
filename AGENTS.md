@@ -1,10 +1,57 @@
 # Remote build and hardware verification
 
-Session paused at the user's request on 2026-10-17. Read `SESSION_HANDOFF.md`
-first when resuming; it records the current working tree, verified calibration,
-saved firmware/logs, and proposed but unimplemented natural lip-sync refinements.
-The user's goal is natural Avatar lip sync, not recognition of all Japanese kana.
-Do not start new implementation or hardware operations until the user resumes.
+The session resumed on 2026-10-18 to implement ModuleLLM microphone formant
+analysis and UART lip sync. `SESSION_HANDOFF.md` records the previous verified
+local-microphone baseline. The user's goal is natural Avatar lip sync, not
+recognition of all Japanese kana. Use a locally configured SSH host to access
+ModuleLLM; `modulellm-host` in examples is a placeholder. Inspect installed
+audio/UART services before use.
+
+## ModuleLLM backend (2026-10-18)
+
+See `modulellm/README.md` for the verified device and build/deployment/rollback.
+The new environment is `m5stack-cores3-modulellm-vowel`; keep the existing
+`m5stack-cores3-hello` default for comparison/rollback. Both build successfully.
+CoreS3 RX=18 / TX=17 is confirmed by the M5Unified pin table, official example
+and actual bidirectional UART. Earlier prose reversing these pins was wrong.
+CoreS3 has been flashed with the ModuleLLM backend; its microphone is disabled.
+AX630C device: Ubuntu 22.04.5 aarch64/glibc 2.35, g++ 11.4.0. No StackFlow audio
+or UART services were running. ALSA hw:0,0 requires 16 kHz S16_LE stereo; mono
+fails. Use arecord as the capture child, right channel by default, without
+changing mixer settings. /dev/ttyS1 is the application UART; leave ttyS0/getty
+alone. The service refuses an already-owned UART instead of stopping its owner.
+The installed service is `modulellm-vowel.service` (enabled), with current link
+`/opt/modulellm-vowel/current` pointing to release `20261018T065303Z-3cac291`.
+Model data belongs in `/var/lib/modulellm-vowel/model.txt`, not CoreS3 NVS.
+The input/mixer fingerprint must match on startup; B recalibrates the new mic.
+Use `bash scripts/deploy_modulellm.sh modulellm-host` to stage/build a new release;
+it does not activate it. Do not overwrite an existing remote Git checkout.
+Protocol is bounded tab-separated UTF-8 text + CRC32, documented in modulellm
+README and shared `src/VowelWire.h`. Result includes Japanese vowel text and
+opening/confidence/calibration state. No PCM is sent over UART. Session, control
+epoch and sequence reject stale results; timeout 500 ms closes the mouth, and
+1 s without accepted results resynchronizes. A/startup mute is local immediately
+and also sent remotely; resume follows HDMI DMA completion + 200 ms guard.
+Native ASan/UBSan tests (`bash scripts/test_native.sh`) and process integration
+tests (`python3 tests/test_modulellm_process.py modulellm/modulellm-vowel`) pass.
+The process test also passed on AX630C. Same PCM/164 results: no vowel label
+differences or opening differences, maximum confidence delta 0.0001 vs Mac.
+This is synthetic parity, not measured real-speaker recognition accuracy.
+Actual microphone streaming and physical UART fixed-vowel/pause/resume were
+verified. CoreS3 startup, both renderers, valid touch ID, ~9.7 fps while receiving,
+and silent waiting after sender stopped are logged in
+`diagnostics/2026-10-18-modulellm-core.log` (ignored). Module service metrics are
+in its journal. Initial live test: 373 16-ms inputs/6 s, mean 105 us/input,
+max 308 us, no audio drop/result replacement. The user confirmed both screens'
+fixed-vowel/closed-mouth test and A chime/resumption, then successful real-mic B
+calibration/save, vowel shapes/text on both screens and A chime/resumption.
+The service logged calibration_save=OK; the model is profile-bound. A controlled
+service restart logged model=loaded and a new CoreS3 resume session; the model file
+hash was unchanged. Personal model values and hashes are not published.
+Do not reset this new personal model to run tests: reset/cancel/idempotence are
+tested using temporary model files and a PTY instead. A 216-second live run had
+13,501 16-ms inputs, mean DSP 99 us/input (max 1,932 us), 479,892 UART bytes, no
+audio drops/queued-result replacement; systemd recorded 2.766 s total CPU time.
 
 The current default PlatformIO environment is `m5stack-cores3-hello`, a dual-display Avatar
 app in `src/hello_world.cpp`. It shows Hello World for 2000 ms, then renders an
@@ -89,8 +136,8 @@ previous model's noise gate. Classification still applies that gate, while
 calibration uses its newly measured quiet level. This prevents an old high
 noise threshold from blocking weak I/U during recalibration. A native
 regression checks that a high old gate suppresses labels but retains features.
-The first roots calibration attempt logged I RMS 262/282 below the old gate
-(179.8 * 1.8), explaining why those frames were excluded before this fix.
+The first roots calibration attempt logged I below the old noise gate,
+explaining why those frames were excluded before this fix.
 Model/room noise persist across reboot and chimes; do not reset NVS while
 testing unless explicitly using the reset-calibration function.
 `tests/test_vowel.cpp` tests synthetic A/I/U/E/O at F0 100/150/220 Hz, rejects
@@ -110,9 +157,8 @@ The user confirmed the Japanese labels match the spoken vowels on both
 displays and the stronger A/U/E mouth shapes are easier to distinguish.
 The user later reported A/I/U mostly show ellipsis; earlier visual confirmation
 is not an accuracy validation. `diagnostics/2026-10-17-vowel-diagnosis.log`
-shows v1 saved noise RMS=179.8 and centers A=950/2575, I=275/1725,
-U=325/1875, E=400/2175, O=375/700 Hz. These differ substantially from some
-recent voiced estimates (e.g. 825/1250, 300/2525, 325/1100). F2/F3 assignment
+shows saved v1 centers differing substantially from later voiced estimates.
+The personal calibration values are omitted from this public record. F2/F3 assignment
 and unstable calibration are suspected, not proven for every utterance.
 The root extractor/robust v2 calibration and calibration balloons are being
 tested; actual A/I/U improvement requires user recalibration/observation.
@@ -137,8 +183,8 @@ The 3-second version (Build Oct 17 2026 17:07:26) was flashed successfully;
 both Avatar targets, active microphone capture and ~10.0..10.1 FPS at startup.
 Native vowel/calibration tests pass with ASan/UBSan for the two-utterance flow.
 In that capture, a subsequent B run completed all ten utterances with breath
-breaks and saved the v2 model to NVS: noise RMS=113, A=913/1170, I=303/2679,
-U=352/1136, E=437/2433, O=390/681 Hz. These replace the earlier v1 centers.
+breaks and saved the v2 model to NVS, replacing the earlier v1 centers.
+Personal calibration values remain on the device and in ignored local logs.
 The run validates the calibration flow and save, not general speech accuracy.
 The user confirmed the 3 s x 2 flow and save, initially reported many ellipses,
 then subsequently confirmed A/I/U/E/O can be distinguished. This is a user
@@ -167,7 +213,7 @@ excluded from the default build. The original dual-display Avatar build remains
 
 This project is built on the development Mac via VS Code Remote SSH. CoreS3 is
 connected to another Mac and flashed/monitored through the browser using
-`/Users/mongonta555/work/web_flash_tool`. A missing local USB port does not mean
+`~/work/web_flash_tool`. A missing local USB port does not mean
 the user's device is disconnected from their browser Mac.
 
 As of 2026-10-17, the Hello World environment uses M5GFX 0.2.33 and software
@@ -180,8 +226,8 @@ unused SPIFFS; the original dual-display Avatar build still does. See
 `diagnostics/README.md` for evidence.
 The current HDMI Avatar uses the same software-I2C configuration and no
 filesystem assets. The user subsequently connected CoreS3 directly to this
-MacBook; its observed port was `/dev/cu.usbmodem114301`. Enumerate ports before
-using it, since the name can change.
+MacBook. Enumerate ports before using one; `/dev/cu.usbmodemXXXX` is a
+placeholder and the actual name can change.
 The user also confirmed the Hello World to Avatar transition and visible
 animation on HDMI. The serial capture is
 `diagnostics/2026-10-17-hello-then-avatar.log` (ignored by Git).
@@ -199,14 +245,14 @@ pads. The user confirmed sound after correcting the output destination.
 Temporary test-tone, PCNT and EDID diagnostics were removed from the app.
 
 The Web Flash Tool automatically saves logs when the browser's Monitor runs.
-Read `/Users/mongonta555/work/web_flash_tool/AGENTS.md` for the log format and
+Read `~/work/web_flash_tool/AGENTS.md` for the log format and
 workflow. The most recently updated saved session can be read with:
 
 ```sh
-node /Users/mongonta555/work/web_flash_tool/scripts/read_serial_log.js --latest
+node ~/work/web_flash_tool/scripts/read_serial_log.js --latest
 ```
 
-Logs are in `/Users/mongonta555/work/web_flash_tool/logs/<session-UUID>.jsonl`.
+Logs are in `~/work/web_flash_tool/logs/<session-UUID>.jsonl`.
 Check metadata and startup output to associate a session with the correct
 device and firmware. If no logs exist yet, the user must reload the updated
 Web Flash Tool and start Monitor. Saved logs can verify HDMI initialization,
@@ -220,7 +266,7 @@ server solely to inspect saved logs.
   subsequent logs report about 8 MiB free PSRAM.
 - The user reproduced HDMI initialization failure with ModuleLLM removed and
   confirmed that both CoreS3 and ModuleDisplay have power connected.
-- Session `dccbb5a1-d1e1-40d7-b4d2-3ee952121302` reports M-Bus output enabled,
+- The initial diagnostic session reports M-Bus output enabled,
   HDMI chip ID `17 02 e2`, FPGA ID `48440004`, and failure selecting bank `81`.
   Banks `80`, `82`, and `84` succeed with HW I2C at 100 kHz / 25 kHz and SW I2C
   at requested 25 kHz. All three methods still read the correct chip ID.
@@ -228,7 +274,7 @@ server solely to inspect saved logs.
   Do not infer a defective chip, insufficient power, or a hardware-I2C-only bug
   from this evidence alone. Earlier M-Bus-disabled warnings are not necessary
   for the failure to occur. Adapter voltage remains unconfirmed.
-- Session `aaf86d20-4989-4110-a36a-86acd4565409` ran the first Hello World test
+- The subsequent diagnostic session ran the first Hello World test
   using M5Unified's standard display initialization. It reproduced the bank-81
   failure with no Avatar linked, before any text could be drawn. The next test
   removes M5Unified too (startup marker includes `M5GFX only`).

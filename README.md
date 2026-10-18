@@ -4,6 +4,19 @@ M5Stack CoreS3にModuleLLMとDisplay Module 13.2をスタックして使う実�
 最初の段階として、CoreS3本体とHDMIモニターの両方にアバターを表示します。
 アバターには指定の[M5Unified-Avatar](https://github.com/mongonta0716/M5Unified-Avatar)を使用しています。
 
+## ModuleLLMのマイクで口パクする版
+
+`m5stack-cores3-modulellm-vowel` 環境では、ModuleLLM内蔵マイクをAX630CのCPUで解析し、
+UARTの「あ・い・う・え・お」という文字列と開き量でCoreS3/HDMIの口を動かします。
+CoreS3のマイクは起動せず、調整と保存もModuleLLM側で行います。
+既定のローカル解析版は比較・復旧用として保持しています。
+[実機環境、配置・起動・停止、UART仕様、調整と復旧手順](modulellm/README.md)を参照してください。
+
+```sh
+pio run -e m5stack-cores3-modulellm-vowel
+bash scripts/deploy_modulellm.sh modulellm-host  # 自分のSSH接続先に置き換える
+```
+
 ## 現在の既定動作: Hello World → Avatar
 
 現在の既定ビルドは`m5stack-cores3-hello`です。
@@ -107,7 +120,7 @@ Avatar版は`pio run -e m5stack-cores3`で引き続きビルドできます。
 - USBシリアルから表情の変更と口パクのデモを操作できます。
 - ModuleDisplayが検出されない場合も、本体画面は動作します。
 
-ModuleLLMの推論・UART通信は次の実装段階です。現在の音声解析にはCoreS3内蔵マイクを使い、ModuleLLMの接続確認は行いません。
+既定環境ではCoreS3内蔵マイクを使います。ModuleLLMマイクとUART通信を使う場合は、上記の別ビルドを選んでください。
 
 ## 接続
 
@@ -116,7 +129,7 @@ ModuleLLMの推論・UART通信は次の実装段階です。現在の音声解�
 3. CoreS3をUSB-CでPCへ接続し、スタックへ給電します。
 
 CoreS3用M5GFXのModuleDisplay設定はSPIのCS=G7、MOSI=G37、MISO=G35、SCLK=G36、I2CのSDA=G12、SCL=G11を使用します。
-ModuleLLMの工場出荷時UART配線（CoreS3側TX=G18、RX=G17）とは重複しません。
+ModuleLLMの工場出荷時UART配線（CoreS3側RX=G18、TX=G17）とは重複しません。
 ModuleLLMのピンを変更済みの場合、ModuleDisplayが使用するG7を選択しないでください。
 
 配線の根拠: [M5GFX / M5ModuleDisplay.h](https://github.com/m5stack/M5GFX/blob/0.2.32/src/M5ModuleDisplay.h)、[ModuleLLMのピン切替](https://docs.m5stack.com/en/compute/module_llm/pins_change)。
