@@ -1,5 +1,7 @@
 # macOS metadata
 .DS_Store
+/SESSION_HANDOFF.md
+modulellm/modulellm-vowel
 
 # Prerequisites
 *.d

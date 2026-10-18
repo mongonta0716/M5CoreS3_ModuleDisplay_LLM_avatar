@@ -1,10 +1,8 @@
 # Remote build and hardware verification
 
-Session paused at the user's request on 2026-10-17. Read `SESSION_HANDOFF.md`
-first when resuming; it records the current working tree, verified calibration,
-saved firmware/logs, and proposed but unimplemented natural lip-sync refinements.
+Read `README.md` and the actual sources when resuming work. Personal calibration
+values remain on the device and in ignored local logs.
 The user's goal is natural Avatar lip sync, not recognition of all Japanese kana.
-Do not start new implementation or hardware operations until the user resumes.
 
 The current default PlatformIO environment is `m5stack-cores3-hello`, a dual-display Avatar
 app in `src/hello_world.cpp`. It shows Hello World for 2000 ms, then renders an
