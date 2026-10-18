@@ -3,6 +3,7 @@
 #include <M5Unified.h>
 #include <Face.h>
 #include <memory>
+#include "VowelModel.h"
 
 // Render both faces sequentially with one animation state. The library's
 // Avatar::start() uses a global draw-task handle, unsuitable for two instances.
@@ -14,6 +15,8 @@ class DualDisplayAvatar {
   void handleCommand(char command);
   void setExpression(m5avatar::Expression expression);
   void setMouthOpenRatio(float ratio);
+  void setVowel(Vowel vowel, float confidence);
+  void setBalloon(const String& title, const String& detail);
 
  private:
   struct Target {
@@ -33,6 +36,11 @@ class DualDisplayAvatar {
   m5avatar::ColorPalette palette_;
   m5avatar::Expression expression_ = m5avatar::Expression::Neutral;
   float mouthOpenRatio_ = 0.0f;
+  Vowel vowel_ = Vowel::Unknown;
+  float vowelConfidence_ = 0;
+  MouthPose mouthPose_;
+  String balloonTitle_, balloonDetail_;
+  uint32_t lastPoseAt_ = 0;
   float gazeV_ = 0.0f;
   float gazeH_ = 0.0f;
   uint32_t lastFrame_ = 0;

@@ -1,5 +1,11 @@
 # Remote build and hardware verification
 
+Session paused at the user's request on 2026-10-17. Read `SESSION_HANDOFF.md`
+first when resuming; it records the current working tree, verified calibration,
+saved firmware/logs, and proposed but unimplemented natural lip-sync refinements.
+The user's goal is natural Avatar lip sync, not recognition of all Japanese kana.
+Do not start new implementation or hardware operations until the user resumes.
+
 The current default PlatformIO environment is `m5stack-cores3-hello`, a dual-display Avatar
 app in `src/hello_world.cpp`. It shows Hello World for 2000 ms, then renders an
 animated Avatar using `DualDisplayAvatar`. It also initializes CoreS3's LCD and
@@ -35,6 +41,113 @@ speaker, IMU, RTC and external display autodetection are disabled.
 buffers, and shares the resulting mouth ratio between both render targets.
 FFT bins 5..60 cover 312.5..3750 Hz. Source and MIT license are vendored in
 `lib/AvatarMicFFT`; native DSP tests are in `tests/test_mic_fft.cpp`.
+Vowel lip sync now adds `VowelAnalyzer`: two 256-pair input buffers make a 32 ms
+frame, anti-alias FIR decimation to 8 kHz, voicing correlation (80..400 Hz),
+pre-emphasis, Hamming window and order-10 autocorrelation LPC. `LpcFormants`
+extracts polynomial roots (bounded 80-iteration Durand-Kerner), converts poles
+to frequency/bandwidth, and rejects narrow tones / broad slope-fitting poles.
+This replaces local envelope maxima, which can merge F1/F2 and select F3.
+Initial centers are tunable heuristics; low-confidence or
+unvoiced input falls back to FFT amplitude. Two-frame label confirmation and
+shared time-smoothed `MouthPose` keep both `VowelMouth` render targets consistent.
+Following feedback that A/U/E looked alike, the pose mapping emphasizes a
+large tall A, small rounded U, and wide shallow rectangular E. Accepted
+confidence >=0.25 maps to 0.85..1 visual strength; weak held labels fade out.
+Width/roundness retain vowel identity at modest levels; energy mainly adjusts
+height with a smooth closure below 0.06 opening. Quantized 0.75x-canvas tests
+check separation at several levels/confidences, including quiet speech.
+`VowelMouth` also draws a scaled speech balloon beside the mouth with Japanese
+あ/い/う/え/お, or … for silence/uncertainty/demo, using `MouthPose::label`.
+The label and shape share the same per-frame state on both displays. Avoid
+upstream `Balloon`'s fixed coordinates / M5.Lcd text-state side effects;
+draw the balloon in each face canvas so it clears and clips with the face.
+RMS below the room-noise gate closes the mouth. Large DSP buffers are members,
+not capture-task stack allocations; publish features under a short portMUX,
+and only replace the vowel model after stopping/joining the mic task.
+BtnB / serial `c` starts calibration: quiet 2 s, then A/I/U/E/O 3 s twice each,
+with 2 s breath breaks between every utterance (including vowel changes).
+Total time is ~50 s. Combine the two utterances of each vowel; exclude rests
+and the first 500 ms of each utterance. Prompts show the vowel and repetition
+number, or 息つぎ, plus the remaining time. Native tests check the 3/2/3 timing,
+between-vowel rests, exclusion of voiced breath frames and millis rollover.
+Both displays show Japanese calibration prompts/countdowns in the Avatar's
+upper-right balloon (24 px text, two short lines), then completion/failure/
+cancellation for 6 s. Normal
+mode shows the inferred vowel beside the mouth. The former LCD-only top banner
+has been removed. BtnA cancels and plays PiPo;
+BtnC / serial `x` resets calibration. Valid, distinct centers from >=12 voiced
+frames/vowel are saved to Preferences namespace `vowel-lipsync`, key `model`,
+with magic/version/size/range checks. Version 2 uses LPC roots; version-1 data
+is preserved/readable but requires B recalibration for the new extractor.
+Quiet samples use a median. Vowel centers are observed pairs nearest the
+two-dimensional median, require >=65% inliers, and must classify >=65% of each
+vowel's collected frames correctly before saving. Failure preserves the prior
+model. Stable synthetic tests include overlapping resonances, low-F2 U, noise
+spikes, occasional F3 assignment, and unstable calibration rejection.
+Feature extraction runs above a fixed RMS floor of 20, independently of the
+previous model's noise gate. Classification still applies that gate, while
+calibration uses its newly measured quiet level. This prevents an old high
+noise threshold from blocking weak I/U during recalibration. A native
+regression checks that a high old gate suppresses labels but retains features.
+The first roots calibration attempt logged I RMS 262/282 below the old gate
+(179.8 * 1.8), explaining why those frames were excluded before this fix.
+Model/room noise persist across reboot and chimes; do not reset NVS while
+testing unless explicitly using the reset-calibration function.
+`tests/test_vowel.cpp` tests synthetic A/I/U/E/O at F0 100/150/220 Hz, rejects
+silence/noise/single tones, checks mouth poses and calibration success/failure,
+cancellation and millis rollover, with ASan/UBSan. This is not a measured
+accuracy result for real Japanese speakers. See README for limitations.
+The vowel build's corrected smoothing path was flashed on 2026-10-17; capture
+`diagnostics/2026-10-17-vowel-lipsync-fixed.log` (ignored) confirms both targets
+render, FFT capture continues, LPC costs about 1..2 ms/frame, and roughly
+10.1 FPS / 98 ms mean draw time. The user subsequently confirmed successful
+calibration and saving, visible vowel-dependent mouth shapes, BtnA audio and
+lip-sync resumption on 2026-10-17. Later startup capture
+`diagnostics/2026-10-17-vowel-balloon.log` confirms the saved model loads from
+NVS after flashing/reboot, both render targets run, and about 10.1 FPS / 98 ms
+mean draw time with the stronger poses and Japanese vowel balloon.
+The user confirmed the Japanese labels match the spoken vowels on both
+displays and the stronger A/U/E mouth shapes are easier to distinguish.
+The user later reported A/I/U mostly show ellipsis; earlier visual confirmation
+is not an accuracy validation. `diagnostics/2026-10-17-vowel-diagnosis.log`
+shows v1 saved noise RMS=179.8 and centers A=950/2575, I=275/1725,
+U=325/1875, E=400/2175, O=375/700 Hz. These differ substantially from some
+recent voiced estimates (e.g. 825/1250, 300/2525, 325/1100). F2/F3 assignment
+and unstable calibration are suspected, not proven for every utterance.
+The root extractor/robust v2 calibration and calibration balloons are being
+tested; actual A/I/U improvement requires user recalibration/observation.
+During this iteration the user reported unreadable/missing calibration prompts,
+then no touch response. `M5.setTouchButtonHeight(40)` is explicit. Diagnostics
+showed FT6336 ID/firmware/vendor all zero before HDMI initialization, via
+hardware I2C, Wire1 and software I2C alike; the same software probe read AW9523
+ID 0x23. Rebinding the HW pins and reinitializing the touch driver did not fix
+it. `recoverTouch()` now pulses TOUCH_RST (AW9523 P0_0) only when the startup
+vendor read is invalid, preserving every other output, then initializes touch.
+After flashing this version, the next captured boot reads 64/01/01 before and
+after HDMI, and logs a B touch at x=153/y=239 and calibration start. The first
+post-flash recovery itself was not captured, so do not claim its return values
+were logged. `diagnostics/2026-10-17-vowel-touch-routing.log` contains several
+builds; use the Build marker to distinguish them. The user confirmed A/B
+recovered and the prompts are readable on 2026-10-17. Real vowel accuracy is
+still unresolved; subsequent A stages rejected variable F1 estimates and kept
+the old model. Both displays remain ~9.7..10.1 FPS. The user could not sustain
+6 s, so the current calibration uses 3 s twice with breath breaks instead.
+The 3-second version (Build Oct 17 2026 17:07:26) was flashed successfully;
+`diagnostics/2026-10-17-vowel-three-second-rounds.log` confirms valid touch IDs,
+both Avatar targets, active microphone capture and ~10.0..10.1 FPS at startup.
+Native vowel/calibration tests pass with ASan/UBSan for the two-utterance flow.
+In that capture, a subsequent B run completed all ten utterances with breath
+breaks and saved the v2 model to NVS: noise RMS=113, A=913/1170, I=303/2679,
+U=352/1136, E=437/2433, O=390/681 Hz. These replace the earlier v1 centers.
+The run validates the calibration flow and save, not general speech accuracy.
+The user confirmed the 3 s x 2 flow and save, initially reported many ellipses,
+then subsequently confirmed A/I/U/E/O can be distinguished. This is a user
+observation, not a measured accuracy rate. Voiced rendering was ~9.7 FPS and
+quiet rendering ~10 FPS.
+The first attempt (`...-vowel-lipsync.log`)
+stalled on unsigned negation in the pose smoother; the fix casts elapsed time
+to float before negation. Native smoothing tests cover 0, typical, long and
+rollover-sized unsigned durations. Do not mistake the first log for this build.
 CoreS3 mic uses I2S1 (MCLK=0, BCK=34, WS=33, DATA=14), sharing both I2S1 and
 GPIO0 with HDMI audio. Stop/join the mic before starting the HDMI speaker;
 stop the speaker after the chime and DMA tail before restarting the mic.

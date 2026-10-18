@@ -1,6 +1,7 @@
 #include "DualDisplayAvatar.h"
 
 #include "AppConfig.h"
+#include "VowelMouth.h"
 #include <algorithm>
 #include <cmath>
 
@@ -62,7 +63,7 @@ bool DualDisplayAvatar::addDisplay(M5GFX& display, uint16_t reservedBottom) {
   target.size = size;
   target.scale = scale;
   target.face.reset(new m5avatar::Face(
-      new m5avatar::Mouth(dimension(50), dimension(90), dimension(4), dimension(60)),
+      new VowelMouth(scale, &mouthPose_, &balloonTitle_, &balloonDetail_),
       position(148, 163),
       new m5avatar::Eye(dimension(8), false), position(93, 90),
       new m5avatar::Eye(dimension(8), true), position(96, 230),
@@ -107,6 +108,16 @@ void DualDisplayAvatar::setMouthOpenRatio(float ratio) {
   mouthOpenRatio_ = std::max(0.0f, std::min(1.0f, ratio));
 }
 
+void DualDisplayAvatar::setVowel(Vowel vowel, float confidence) {
+  vowel_ = vowel;
+  vowelConfidence_ = std::max(0.0f, std::min(1.0f, confidence));
+}
+
+void DualDisplayAvatar::setBalloon(const String& title, const String& detail) {
+  balloonTitle_ = title;
+  balloonDetail_ = detail;
+}
+
 void DualDisplayAvatar::handleCommand(char command) {
   switch (command) {
     case 'n': setExpression(m5avatar::Expression::Neutral); break;
@@ -145,6 +156,11 @@ void DualDisplayAvatar::update(uint32_t now) {
   const float mouth = mouthDemo_
                           ? fabsf(sinf((now % 600) * (2.0f * PI / 600.0f)))
                           : mouthOpenRatio_;
+  const auto wanted = vowelMouthPose(mouthDemo_ ? Vowel::Unknown : vowel_,
+                                    vowelConfidence_, mouth);
+  // Time-based smoothing remains consistent when display FPS changes.
+  smoothMouthPose(mouthPose_, wanted, now - lastPoseAt_);
+  lastPoseAt_ = now;
   const m5avatar::Gaze gaze(gazeV_, gazeH_);
 
   for (auto& target : targets_) {
