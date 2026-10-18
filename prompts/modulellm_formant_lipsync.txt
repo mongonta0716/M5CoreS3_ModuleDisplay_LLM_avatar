@@ -23,9 +23,9 @@ ModuleLLMの内蔵マイク
 <作業ディレクトリ>/M5CoreS3_ModuleDisplay_LLM_avatar
 
 実機確認済みの基準コミット:
-747ea7d Add calibrated formant-based vowel lip sync and guided setup
+4a2ac21 Add calibrated formant-based vowel lip sync and guided setup
 
-最初にAGENTS.md、SESSION_HANDOFF.md、README.mdと実ソースを読んでください。
+最初にAGENTS.md、README.mdと実ソースを読んでください。
 以前の一時中断は、この移植作業を開始する依頼によって解除します。
 作業ツリーに新たな変更があれば保持し、既存のローカル変更を上書きしないでください。
 
