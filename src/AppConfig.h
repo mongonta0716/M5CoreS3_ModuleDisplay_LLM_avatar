@@ -2,6 +2,16 @@
 
 #include <stdint.h>
 
+// 0: CoreS3 microphone and local DSP; 1: ModuleLLM microphone/DSP over UART.
+// A build flag (-DUSE_MODULELLM=0 or 1) overrides this default.
+#ifndef USE_MODULELLM
+#define USE_MODULELLM 0
+#endif
+
+#if USE_MODULELLM != 0 && USE_MODULELLM != 1
+#error "USE_MODULELLM must be 0 or 1"
+#endif
+
 // 1: native 1280x720, 2: 640x360 -> 720p, 4: 320x180 -> 720p.
 // Scaling is performed by ModuleDisplay, keeping the HDMI signal at 720p.
 #ifndef AVATAR_HDMI_SCALE

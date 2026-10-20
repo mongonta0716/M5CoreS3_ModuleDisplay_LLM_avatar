@@ -20,7 +20,7 @@ ModuleLLMの内蔵マイク
 2. 対象リポジトリと出発点
 
 リポジトリ:
-/Users/mongonta555/MyGit/M5CoreS3_ModuleDisplay_LLM_avatar
+<作業ディレクトリ>/M5CoreS3_ModuleDisplay_LLM_avatar
 
 実機確認済みの基準コミット:
 4a2ac21 Add calibrated formant-based vowel lip sync and guided setup

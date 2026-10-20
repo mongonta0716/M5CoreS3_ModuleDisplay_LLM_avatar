@@ -1,0 +1,21 @@
+[Unit]
+Description=ModuleLLM formant vowel microphone and UART service
+After=sound.target
+
+[Service]
+Type=simple
+ExecStart=/bin/bash /opt/modulellm-vowel/current/modulellm/launch.sh
+WorkingDirectory=/opt/modulellm-vowel/current/modulellm
+StateDirectory=modulellm-vowel
+StateDirectoryMode=0750
+Restart=on-failure
+RestartSec=2
+TimeoutStopSec=5
+KillMode=control-group
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target
