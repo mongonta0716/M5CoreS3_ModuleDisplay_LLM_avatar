@@ -1,9 +1,12 @@
 # ModuleLLMのマイクで判別してUARTで口パク
 
-ModuleLLM内蔵マイク → AX630CのCPUでFFT/LPC/5母音判別 → UARTで日本語文字列と開き量 → CoreS3の2画面Avatar、という構成です。PCMをUARTへ送りません。ASR・LLM・NPU・ネットワークは通常動作に不要です。
+ModuleLLM内蔵マイク → AX630CのCPUでFFT/LPC/5母音判別 → UARTで日本語文字列と開き量 → CoreS3のAvatar（ModuleDisplay有効時はHDMIにも表示）、という構成です。PCMをUARTへ送りません。ASR・LLM・NPU・ネットワークは通常動作に不要です。
 
 `main`に内蔵マイク版とModuleLLM版を統合しています。`src/AppConfig.h`の `USE_MODULELLM=0`（既定）はCoreS3内蔵マイク、`1`はModuleLLM入力です。
-`m5stack-cores3-hello` はヘッダーの既定値を使い、`m5stack-cores3-modulellm-vowel` は `-DUSE_MODULELLM=1` で上書きします。切り替え後はCoreS3を再ビルド・書き込みしてください。
+`m5stack-cores3`（`m5stack-cores3-hello`も同じ）はヘッダーの既定値を使い、`m5stack-cores3-modulellm-vowel` は `-DUSE_MODULELLM=1` で上書きします。`USE_MODULEDISPLAY=0`（既定）は本体LCD・本体スピーカー、`1`は本体LCD＋HDMI・HDMI音声です。両モジュールを使う場合は `m5stack-cores3-modulellm-display` を選択してください。切り替え後はCoreS3を再ビルド・書き込みしてください。
+CoreS3からのM-Bus給電は`cfg.output_power=true`で有効化を要求します。起動ログの`M-Bus power: requested=on actual=...`で実際の状態を確認し、有効にならない場合はModuleLLM本体のUSB-Cから別途給電してください。
+CoreS3内蔵マイクを使う`USE_MODULELLM=0 USE_MODULEDISPLAY=0`では、CoreS3のUSB1本でModuleLLMも起動し、音・口パク・A再生後の復帰が正常なことを実機確認済みです。
+`USE_MODULELLM=0`でも接続したModuleLLMは電気的に切り離されません。以前のM-Bus給電無効の設定では、未給電のまま重ねるとCoreS3の内蔵マイク入力が0になり、取り外すかModuleLLMにもUSB給電すると復帰しました。
 履歴整理後の内蔵マイク版の基準はコミット `4a2ac21`、移植直前は `8dbbd16` です。
 
 ## 確認した実機環境
@@ -38,9 +41,9 @@ ModuleLLM内蔵マイク → AX630CのCPUでFFT/LPC/5母音判別 → UARTで日
 - UART送信は「送信中の1行＋差し替え可能な最新1行」に制限。送信が250ms以上止まったら途中行を破棄し、改行で再同期。
 - `ModelStore.h`: マイク設定の指紋付きモデル。temp書き込み、fsync、rename、ディレクトリfsyncで保存。失敗は保存失敗として通知。
 - CoreS3の `ModuleLlmLipSync.h`: 日本語文字列→既存口形、通信タイムアウト、調整画面。CoreS3マイクは初期化しない。
-- A/起動音の間はCoreS3側で即座に口パクを抑止し、ModuleLLMへpauseを送信。HDMIのPCM/DMA終了後に200msの余韻時間を置いてresume。制御世代を変え、古い結果で再び口が開くことを防止。
+- A/起動音の間はCoreS3側で即座に口パクを抑止し、ModuleLLMへpauseを送信。選択したスピーカーのPCM/DMA終了後に200msの余韻時間を置いてresume。制御世代を変え、古い結果で再び口が開くことを防止。
 
-口形・形の補間・両画面の描画は従来どおりCoreS3です。解析の移動で描画FPSが上がることは保証しません。
+口形・形の補間・画面の描画は従来どおりCoreS3です。解析の移動で描画FPSが上がることは保証しません。
 
 ## ビルドと試験
 
@@ -107,15 +110,15 @@ python3 scripts/monitor_serial.py --port /dev/cu.usbmodemXXXX --log /tmp/modulel
 ```
 
 監視終了はCtrl+C、または別端末から `touch /tmp/modulellm-core-monitor.stop`。CoreS3のポート名は列挙して確認してください。
-`ModuleLLM UART: ... RX=18 TX=17; CoreS3 mic disabled` と `ModuleLLM: connected`、両画面の初期化ログを確認します。実表示・音は画面とスピーカーで確認してください。
+`ModuleLLM UART: ... RX=18 TX=17; CoreS3 mic disabled` と `ModuleLLM: connected`、使用する画面の初期化ログを確認します。実表示・音は画面とスピーカーで確認してください。
 
 以前のModuleLLMアプリへ戻すにはサービスを止め、currentリンクを記録した旧リリースに戻し、再度startします。初回導入を取り消すならstopとdisableで十分です。モデルを削除する必要はありません。
-ローカル解析の口パクへ戻す場合は、`src/AppConfig.h`を `USE_MODULELLM=0` に戻し、CoreS3へ `m5stack-cores3-hello` 環境を再度uploadしてください。通常のアプリuploadはCoreS3のNVSを消しません。erase_flashや全領域の結合イメージ書き込みで代用しないでください。
+ローカル解析の口パクへ戻す場合は、`src/AppConfig.h`を `USE_MODULELLM=0` に戻し、CoreS3へ `m5stack-cores3` 環境を再度uploadしてください。通常のアプリuploadはCoreS3のNVSを消しません。erase_flashや全領域の結合イメージ書き込みで代用しないでください。
 
 ## 調整
 
-B: 静音2秒→各母音3秒×2回、全発声の間に息つぎ2秒（約50秒）。両画面の案内に従います。
-A: 調整中止＋HDMI「ピポ」。C: ModuleLLMの個人設定を初期化します。
+B: 静音2秒→各母音3秒×2回、全発声の間に息つぎ2秒（約50秒）。画面の案内に従います。
+A: 調整中止＋選択したスピーカーで「ピポ」。C: ModuleLLMの個人設定を初期化します。
 
 マイクが変わったため、CoreS3の旧NVS値は移植しません。ModuleLLM上の `/var/lib/modulellm-vowel/model.txt` に新しく保存します。
 設定形式は `VOWELROOTS 1 <profile>` と静音RMS、5組のF1/F2です。profileは起動時に入力デバイス・形式・チャンネル・ミキサー設定からSHA-256で作ります。入力設定やゲイン等を変更したらサービスを再起動し、Bで再調整してください。変更前の条件の保存値は読み込みません。CoreS3のNVSは保持されます。

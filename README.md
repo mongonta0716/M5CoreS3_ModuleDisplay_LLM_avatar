@@ -1,46 +1,64 @@
 # CoreS3 + ModuleLLM + Display Module 13.2 Avatar
 
-M5Stack CoreS3にModuleLLMとDisplay Module 13.2をスタックして使う実験用のPlatformIO / Arduinoプロジェクトです。
-最初の段階として、CoreS3本体とHDMIモニターの両方にアバターを表示します。
+M5Stack CoreS3のAvatarを、内蔵マイクまたはModuleLLMの音声解析で口パクさせるPlatformIO / Arduinoプロジェクトです。
+ModuleDisplayを使うと、本体LCDに加えてHDMIモニターにも表示できます。
 アバターには指定の[M5Unified-Avatar](https://github.com/mongonta0716/M5Unified-Avatar)を使用しています。
 
-## マイク入力の切り替え（USE_MODULELLM）
+## 構成の切り替え（USE_MODULELLM / USE_MODULEDISPLAY）
 
-`main`に両方の実装を統合しています。`src/AppConfig.h`の`USE_MODULELLM`で、
-コンパイル時にマイク入力と解析・調整の保存先を切り替えます。
-両モードともCoreS3とModuleDisplayを使い、Hello Worldを2秒表示した後、
-本体とHDMIのAvatar、下40pxのA/B/Cタッチボタン、HDMIの「ピポ」が動きます。
+`src/AppConfig.h`の2つの値で、コンパイル時に使用するモジュールを選択します。
+既定値はどちらも`0`で、CoreS3単体で動作します。
 
-| USE_MODULELLM | 構成・マイク | 解析・調整の保存先 | PlatformIO環境 |
-| --- | --- | --- | --- |
-| `0`（既定） | CoreS3内蔵マイク。ModuleLLMの接続は不要 | CoreS3 / NVS | `m5stack-cores3-hello` |
-| `1` | ModuleLLM内蔵マイク。CoreS3内蔵マイクは無効 | ModuleLLM / モデルファイル | `m5stack-cores3-modulellm-vowel` |
+| USE_MODULELLM | USE_MODULEDISPLAY | マイク・解析先 | 表示・音声出力 | PlatformIO環境 |
+| --- | --- | --- | --- | --- |
+| `0` | `0` | CoreS3内蔵マイク・CoreS3 | 本体LCD・本体スピーカー | `m5stack-cores3` |
+| `0` | `1` | CoreS3内蔵マイク・CoreS3 | 本体LCD＋HDMI・HDMI音声 | `m5stack-cores3-display` |
+| `1` | `0` | ModuleLLM内蔵マイク・AX630C | 本体LCD・本体スピーカー | `m5stack-cores3-modulellm-vowel` |
+| `1` | `1` | ModuleLLM内蔵マイク・AX630C | 本体LCD＋HDMI・HDMI音声 | `m5stack-cores3-modulellm-display` |
 
-通常の`pio run`は`m5stack-cores3-hello`を使い、ヘッダーの既定値`0`で動作します。
-この環境をModuleLLM入力にするには、`src/AppConfig.h`の既定値を`1`へ変更してください。
-`-DUSE_MODULELLM=0`または`-DUSE_MODULELLM=1`をビルドフラグで指定した場合は、
-ヘッダーの値より優先されます。`m5stack-cores3-modulellm-vowel`環境は常に`1`を指定します。
-設定変更後は再ビルド・書き込みが必要です。古い診断用`m5stack-cores3`環境は切り替え対象外です。
+通常の`pio run`と`pio run -e m5stack-cores3`は、ヘッダーの値を使います。
+`m5stack-cores3-hello`も同じアプリの互換用エイリアスです。
+上表の追加モジュール用環境は、対応する値を`-D...=1`で上書きします。
+ビルドフラグがヘッダーより優先されるため、モジュールを無効に戻す場合は
+ヘッダーを`0`に戻して`m5stack-cores3`で再ビルド・書き込みしてください。
+古い診断用`m5stack-cores3-legacy`はこの切り替えの対象外です。
+
+`USE_MODULEDISPLAY=0`ではHDMIへのアクセスを行わず、Hello WorldとAvatarを本体LCDに表示し、
+起動時とAの「ピポ」は本体スピーカーから再生します。
+`1`では従来どおりHello WorldをHDMIに表示した後、両画面でAvatarを動かし、HDMIへ音声を出します。
+どちらもHello Worldは2秒、下40pxのA/B/Cタッチボタンを使い、再生中は口パクを抑止します。
+
+`USE_MODULELLM=0`では個人設定をCoreS3のNVSへ保存します。
+`1`ではCoreS3のマイクを起動せず、ModuleLLMからUARTで受けた母音・開き量を使い、
+調整と保存もModuleLLM側で行います。2つの個人設定は独立し、互いの値を削除・流用しません。
+ModuleLLM未接続時も画面とAの操作は継続します。
+
+ModuleLLMの給電はこれらのフラグとは別です。CoreS3からのM-Bus給電は、M5Unified標準と同じ
+`cfg.output_power=true`で有効化を要求します。起動ログの`M-Bus power: requested=on actual=...`で実際の状態を確認できます。
+CoreS3＋ModuleLLMを重ねた`USE_MODULELLM=0` / `USE_MODULEDISPLAY=0`の実機では、CoreS3のUSB1本で
+ModuleLLMが起動し、起動音・Aの音・口パク・A再生後の復帰が正常なことを確認しました。
+この動作確認後も`setExtPower(true) is canceled`と`actual=off`のログが残っており、実際の給電経路と状態判定の関係は未確認です。
+`USE_MODULELLM=0`でも、接続したModuleLLMは電気的に切り離されません。
+以前の`output_power=false`の実機では、未給電のModuleLLMを重ねるとCoreS3のマイク入力がすべて0になりました。
+同じファームウェアで、ModuleLLMを取り外すか、そのUSB-Cにも給電すると音と口パクが動くことを確認済みです。
+M-Busからの給電が有効にならない場合は、ModuleLLM側にもUSB給電するか、使用しないモジュールを取り外してください。
+未給電時に影響を受ける内部信号や電気的な仕組みまでは特定していません。
 
 ```sh
-# ヘッダーの既定値0でCoreS3内蔵マイクを使う
-pio run -e m5stack-cores3-hello
+# AppConfig.hの値でビルド・書き込み（既定はCoreS3単体）
+pio run -e m5stack-cores3 -t upload
 
-# ビルドフラグUSE_MODULELLM=1でModuleLLMを使う
-pio run -e m5stack-cores3-modulellm-vowel
+# ModuleLLM＋ModuleDisplayを両方使う
+pio run -e m5stack-cores3-modulellm-display
 bash scripts/deploy_modulellm.sh modulellm-host  # 自分のSSH接続先に置き換える
 ```
 
-ModuleLLM版ではAX630CのCPUで解析し、UARTの「あ・い・う・え・お」という文字列と
-開き量で両画面の口を動かします。起動時・Aの音の間は結果をミュートし、再生後に復帰します。
-B/Cの調整・初期化は選択中の解析先だけを操作します。CoreS3のNVSとModuleLLMの設定は独立し、
-切り替えのために互いの個人設定を削除・流用しません。ModuleLLMが未接続でも描画とAの操作は継続します。
-[実機環境、配置・起動・停止、UART仕様、調整と復旧手順](modulellm/README.md)を参照してください。
+[ModuleLLMの配置・起動・停止、UART仕様、調整と復旧手順](modulellm/README.md)も参照してください。
 
-## 現在の既定動作: Hello World → Avatar
+## Hello World → Avatar（ModuleDisplay有効時）
 
-現在の既定ビルドは`m5stack-cores3-hello`、`USE_MODULELLM=0`です。
-以下の内蔵マイクに関する説明はこの設定での動作です。
+以下は`USE_MODULELLM=0`、`USE_MODULEDISPLAY=1`での動作です。
+`USE_MODULEDISPLAY=0`では本体LCD・本体スピーカーだけを使います。
 CoreS3 + ModuleDisplayで、HDMIモニターに紺色背景・白い枠・中央の`Hello World`を
 **2秒間表示してから、アニメーションするAvatarへ切り替えます**。
 HDMI側は320×180で描画し、ModuleDisplayで1280×720へ4倍拡大します。
@@ -66,7 +84,7 @@ CoreS3本体には操作画面を表示します。M5Unifiedの`setTouchButtonHe
 A/B/Cのタッチボタン領域にし、左側のAを押すとHDMIモニターから「ピポ」の2音が鳴ります。
 起動時も同じ音を鳴らします。Bは声の調整、Cは声の調整を初期値へ戻す操作です。
 起動時・A押下時の両方で、ユーザーがモニターからの実際の音を確認済みです。
-HDMI音声は48kHzステレオのI2S（BCK=G6、DATA=G13、LRCK=G0）を使います。
+ModuleDisplay有効時のHDMI音声は48kHzステレオのI2S（BCK=G6、DATA=G13、LRCK=G0）を使います。
 内蔵マイク（MCLK=G0、BCK=G34、WS=G33、DATA=G14）とHDMI音声はI2S1とG0を共有するため、
 「ピポ」の再生中は録音・口パクを一時停止し、再生後に録音を再開します。
 2026-10-17に、両画面の口パク・Aの発音・再生後の口パク復帰をユーザーが実機確認済みです。
@@ -87,16 +105,16 @@ Hello World版はM5GFX **0.2.33**を使用します。0.2.32には、HDMI送信I
 **0.2.33 + ソフトウェアI2Cで初期化・描画に成功、ユーザーもHello Worldの実表示を確認済み**です。
 ACK電圧の実測や、ハードウェアI2Cの内部状態が失敗する詳細は未確認です。
 [調査結果と比較手順](diagnostics/README.md)を参照してください。
-従来の2画面Avatar版（`m5stack-cores3`）の依存ライブラリは現時点では0.2.32のままです。
+従来の2画面Avatar版（`m5stack-cores3-legacy`）の依存ライブラリは現時点では0.2.32のままです。
 
 ModuleDisplayのDC入力仕様は**9〜24V**です。給電ケーブルの接続だけでなく、アダプターの
 出力電圧とモジュールの電源スイッチも確認してください。
 
 ```sh
-pio run -e m5stack-cores3-hello
+pio run -e m5stack-cores3-display
 ```
 
-Webツールで`↻`を押し、名前に`m5stack-cores3-hello`を含む新しいbinを選んで、
+Webツールで`↻`を押し、名前に`m5stack-cores3-display`を含む今回の環境の新しいbinを選んで、
 Board=`CoreS3`で書き込みます。Monitorを開始してDevice Resetすると、
 `APP: Hello World -> Avatar (CoreS3 + HDMI + mic FFT)`と、成功時には`HelloWorld: text drawn on HDMI ...`が記録されます。
 2秒後に`HelloWorld: held for 2000 ms; starting Avatar`、`Avatar ready: ...`、
@@ -118,7 +136,7 @@ Board=`CoreS3`で書き込みます。Monitorを開始してDevice Resetする�
 録音バッファの完了通知でFFTを実行するため、HDMIの描画中も解析を継続します。
 修正版は`HDMI test: M5GFX 0.2.33 / transmitter ACK fix #339`でも識別できます。
 さらに`HDMI test: software I2C port=-1 SDA=12 SCL=11`が表示されます。
-音声の初期化は`HDMI audio: ready, 48000 Hz stereo, ...`、再生要求は
+音声の初期化は`HDMI audio: ready, 48000 Hz ...`、再生要求は
 `HDMI chime: startup queued` / `HDMI chime: BtnA queued`で確認できます。
 ログは音の再生要求までを示し、実際に鳴ったかはモニター側で確認してください。
 HDMIキャプチャーをQuickTime経由で聞く場合は、QuickTime/macOSの音声出力先も確認してください。
@@ -127,17 +145,17 @@ Hello World版はファイルシステムを使用しないため、結合binに
 初期化に失敗した場合は`HelloWorld: HDMI initialization failed; text was not drawn.`と表示します。
 描画完了ログだけではモニター上の表示までは確認できないため、実際の映像も確認してください。
 
-Avatar版は`pio run -e m5stack-cores3`で引き続きビルドできます。
+旧診断用アプリは`pio run -e m5stack-cores3-legacy`でビルドできます。
 
 ## 現在の機能
 
-- CoreS3: 320×240、ModuleDisplay: HDMI出力1280×720 / 60Hz。
+- CoreS3: 320×240。ModuleDisplay有効時はHDMI出力1280×720 / 60Hzにも表示します。
 - 外部画面には4:3の顔を960×720で中央表示。縦横比を維持し、左右に余白を設けます。
-- 両画面で同じ表情・まばたき・視線・呼吸を描画します。
-- 内蔵マイクのFFTで両画面のAvatarを口パクさせます（既定ビルド）。
+- 表情・まばたき・視線・呼吸を描画し、ModuleDisplay有効時は両画面で同じ状態を表示します。
+- 内蔵マイクのFFTでAvatarを口パクさせます（既定ビルド）。
 - LPCによる母音の簡易推定で、口の幅・高さ・丸みを変えます。声の調整結果はNVSに保存します。
-- 画面下40ドットのAでHDMIの「ピポ」を再生します（既定ビルド）。
-- 従来の`m5stack-cores3`ビルドでは、本体画面のタッチで6種類の表情を順に切り替えます。
+- 画面下40ドットのAで「ピポ」を再生します。出力先は本体スピーカーまたはHDMIです。
+- 従来の`m5stack-cores3-legacy`ビルドでは、本体画面のタッチで6種類の表情を順に切り替えます。
 - USBシリアルから表情の変更と口パクのデモを操作できます。
 - ModuleDisplayが検出されない場合も、本体画面は動作します。
 
@@ -145,8 +163,8 @@ Avatar版は`pio run -e m5stack-cores3`で引き続きビルドできます。
 
 ## 接続
 
-1. 電源を切ってCoreS3、ModuleLLM、Display Module 13.2をM5-Busでスタックします。
-2. ModuleDisplayと720p対応のHDMIモニターを接続し、モニターの入力を選びます。
+1. 使用する構成に合わせてフラグを設定します。モジュールを使用する場合は、電源を切ってM5-Busでスタックします。
+2. ModuleDisplayを使用する場合は外部電源と720p対応のHDMIモニターを接続し、モニターの入力を選びます。
 3. CoreS3をUSB-CでPCへ接続し、スタックへ給電します。
 
 CoreS3用M5GFXのModuleDisplay設定はSPIのCS=G7、MOSI=G37、MISO=G35、SCLK=G36、I2CのSDA=G12、SCL=G11を使用します。
@@ -166,18 +184,30 @@ pio device monitor --port /dev/cu.usbmodemXXXX --baud 115200
 ```
 
 起動ログで、内部画面とHDMI画面の検出結果、論理解像度、アバター用バッファの確保結果、空きヒープ / PSRAMを確認できます。
-`HDMI: output 1280x720@60, logical 1280x720, scale 1`と、2画面分の`Avatar ready`が表示されることを確認してください。
+`Config: USE_MODULELLM=... USE_MODULEDISPLAY=...`で実際に組み込まれた構成を確認します。
+CoreS3単体では`Avatar targets: CoreS3=ready HDMI=disabled`、ModuleDisplay有効時は
+`HDMI: output 1280x720@60, logical 320x180, hardware scale 4`と`HDMI=ready`を確認してください。
 CoreS3のPSRAMはQuad接続のため、`board_build.arduino.memory_type = qio_qspi`を使用します。
 `qio_opi`ではPSRAMの初期化に失敗します。設定変更後は上記の`pio run ... -t upload`でブートローダーとアプリを再書き込みしてください。
 HDMI信号の60Hzとアバターの更新速度は別です。描画は最大約15fpsに制限し、実際の更新速度はSPI転送・描画時間に依存します。
 
 既存の`scripts/copy_firmware.py`も使用します。ビルド後に結合ファームウェアが`.pio_build_firmware/`へ保存されます。
-Avatar版はSPIFFSを含み、ファイルシステムを使用しないHello World版は含みません。
+現在のアプリも旧診断用アプリも実行時のファイルシステムを使用しないため、SPIFFSの生成・同梱を行いません。
 `data/`は現在空で、追加の画像・音声ファイルは不要です。
+
+### Apple Siliconでmkspiffsが実行できない場合
+
+`mkspiffs_espressif32_arduino: Bad CPU type in executable`は、Intel向けの
+SPIFFS作成ツールをホストMacが実行できない場合のエラーです。
+旧設定の`m5stack-cores3`は空のSPIFFSを生成していましたが、現在は
+`custom_bundle_filesystem = no`を指定し、通常のビルド・uploadでは呼び出しません。
+VS Codeでは`m5stack-cores3`を選択して書き込めます。ModuleLLMを使う場合は
+`AppConfig.h`の2つの構成フラグ、または上表の環境を選択してください。
 
 ### HDMIが表示されない場合
 
-HDMIはM5Unifiedの電源初期化後に500ms待ち、最大3回初期化します。
+現在のアプリはソフトウェアI2CでHDMIを初期化します。以下の最大3回のリトライと追加診断は
+`m5stack-cores3-legacy`の動作です。
 起動ログの`Power`はM-Bus出力の有効状態、USB電圧、AXP2101のTS入力電圧（電源判定用）を表示します。
 
 - `Chip ID: 17 02 e2`と`FPGA ID:48440004`が読めても、`failed to initialize the HDMI transmitter`が出るとHDMI画面は登録されません。描画用バッファを小さくしても、この初期化失敗は解消しません。
@@ -201,7 +231,7 @@ HDMI初期化が3回失敗した場合は、`HDMI diag:`で追加診断を行い
 キャンバスはPSRAMを利用可能な設定にし、転送バッファは内部RAMに置きます。
 
 拡大率を変更する場合は、`platformio.ini`の対象環境の`-DAVATAR_HDMI_SCALE`を変更して再ビルドします。
-既定の`m5stack-cores3-hello`は`4`、従来の`m5stack-cores3`は`1`です。
+既定の`m5stack-cores3`（`m5stack-cores3-hello`も同じ）は`4`、従来の`m5stack-cores3-legacy`は`1`です。
 
 | 設定 | 論理解像度 | 論理的な顔のサイズ | HDMI出力 |
 | --- | --- | --- | --- |
@@ -210,13 +240,13 @@ HDMI初期化が3回失敗した場合は、`HDMI diag:`で追加診断を行い
 | `4`（既定ビルド） | 320×180 | 240×180 | 1280×720、4倍拡大 |
 
 低解像度モードではModuleDisplayがハードウェアで拡大します。720pの16:9比率に合わせて論理解像度も16:9にし、その中央に4:3の顔を表示します。
-従来の`m5stack-cores3`ビルドでは、起動時に外部画面用バッファの確保に失敗した場合、2倍、4倍の低解像度モードへ順に切り替えて再試行します。HDMI出力は1280×720のままです。
+従来の`m5stack-cores3-legacy`ビルドでは、起動時に外部画面用バッファの確保に失敗した場合、2倍、4倍の低解像度モードへ順に切り替えて再試行します。HDMI出力は1280×720のままです。
 すべて失敗した場合や、動作中の再確保に失敗した場合は該当画面の描画を停止してログにエラーを表示し、他の画面の描画を続けます。
 
 ## 操作
 
 既定ビルドでは、話しかけると口が動き、下部のAを押すと「ピポ」が鳴ります。
-従来の`m5stack-cores3`ビルドでは、本体画面のタッチでNeutral → Happy → Angry → Sad → Doubt → Sleepyの順に変化します。
+従来の`m5stack-cores3-legacy`ビルドでは、本体画面のタッチでNeutral → Happy → Angry → Sad → Doubt → Sleepyの順に変化します。
 
 ### 母音に合わせる声の調整（既定ビルド）
 
@@ -286,14 +316,14 @@ Aの発音と再生後の口パク復帰をユーザーが実機確認済みで�
 ## 構成と実装上の注意
 
 - `src/main.cpp`: CoreS3 / ModuleDisplayの初期化、タッチ・USBシリアル入力。
-- `src/hello_world.cpp`: 既定ビルドの起動・タッチ・HDMI音声とマイクの切り替え。
+- `src/hello_world.cpp`: 既定ビルドの起動・タッチ・表示構成と音声入出力の切り替え。
 - `src/MicLipSync.h`: 内蔵マイクの録音、完了通知からのFFT処理。
 - `src/MicFftAnalyzer.h`: FFTの帯域集計、感度調整、口の開閉の平滑化。
 - `src/VowelAnalyzer.h` / `src/LpcFormants.h`: 有声判定、LPCの極からのF1/F2推定、母音判定の継続処理。
 - `src/VowelModel.h` / `src/VowelMouth.h`: 母音の特徴値、幅・高さ・丸みを変える口パーツ、日本語の母音を表示する吹き出し。
 - `src/VowelCalibration*.h`: 段階的な声の調整とNVS保存。
 - `lib/AvatarMicFFT`: avatar-micから取り込んだFFTとMITライセンス。
-- `src/AppConfig.h`: HDMIの論理解像度・ハードウェア拡大率。
+- `src/AppConfig.h`: マイク・ModuleDisplayの有無、HDMIの論理解像度・ハードウェア拡大率。
 - `src/DualDisplayAvatar.*`: 顔の配置、2画面への描画、共通のアニメーション状態。
 
 M5Unified-Avatarはコミット`69e8045bf98f49509611563b9d16ea433c7b8ea7`に固定しています。

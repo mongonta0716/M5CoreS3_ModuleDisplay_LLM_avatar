@@ -7,6 +7,70 @@ recognition of all Japanese kana. Use a locally configured SSH host to access
 ModuleLLM; `modulellm-host` in examples is a placeholder. Inspect installed
 audio/UART services before use.
 
+## Module selection (2026-10-20)
+
+`USE_MODULELLM` selects the microphone backend and `USE_MODULEDISPLAY` selects
+HDMI video/audio. Both default to 0 in `src/AppConfig.h`; firmware features and
+physically attached modules are independent. With ModuleDisplay disabled, do not construct or
+initialize its SPI/I2C display; use the CoreS3 LCD and M5.Speaker for the chime.
+Both speaker modes share I2S1 with the internal microphone: stop/join the mic
+before playing and stop the speaker before resuming capture. `Chime.h` selects
+the speaker. Print both flag values at startup to detect build-flag overrides.
+Build the four environments `m5stack-cores3`, `m5stack-cores3-display`,
+`m5stack-cores3-modulellm-vowel`, and `m5stack-cores3-modulellm-display` when
+changing shared audio/display integration. The HDMI diagnostics force the display
+flag to 1; the old `m5stack-cores3-legacy` remains an independent diagnostic app.
+
+The first standalone CoreS3 investigated on 2026-10-20 was a different unit from
+the one used for the successful dual-display microphone tests. Both the normal
+app and a minimal M5.Mic.record test received all-zero PCM. Direct I2S reads also
+returned zeros; clocks were present but no transitions were observed on GPIO14.
+Temporary register/power experiments were removed; retain the normal M5Unified
+codec initialization. Preserve NVS.
+After uploading a firmware for user observation, keep it running until the user
+answers; do not replace it with a diagnostic while a display/audio question is
+pending.
+The user confirmed the standalone display is normal but the internal chime is
+inaudible, unchanged after a complete power cycle. A presses are received.
+The amplifier's configuration reads back correctly, and during playback its
+SYSST is 0x0311 (clock lock / amplifier switching). PCNT observed BCK/LRCK edges
+but no GPIO13 data edges, including a standard one-second M5.Speaker.tone test;
+the source PCM has nonzero amplitude and the GPIO13 matrix selects I2S1.
+These observations do not establish a hardware defect. A proposed I2S0
+comparison failed to compile before any upload and was removed. The user
+suspected that unit and replaced it with the previously working CoreS3.
+
+The replacement runs the normal `USE_MODULELLM=0 USE_MODULEDISPLAY=0` app. The
+user confirmed sound works but lip sync does not; PCM peak is still zero.
+Unlike the first unit, the replacement is stacked with ModuleLLM (user confirmed
+after upload); do not assume it is standalone. Capture on I2S0 also gave zeros,
+as did starting capture without the startup chime. Both experiments were removed
+and the full normal app restored. M5Unified's installed source matches the
+official 0.2.26 tag. After powering off and removing ModuleLLM, the user confirmed
+both sound and lip sync work; serial capture also shows nonzero PCM. The failed
+stacked test used only the CoreS3 USB supply, with no USB power to ModuleLLM,
+while `cfg.output_power=false` disables CoreS3 M-Bus power. Thus the replacement
+is functional; investigate the attached module's power/shared signals rather
+than assuming a microphone defect. With the same normal firmware and ModuleLLM
+separately USB powered, the user confirmed sound and lip sync also work.
+Thus the unpowered attached ModuleLLM was the reproducible trigger. The exact
+electrical mechanism/shared signal is unverified; do not assert an I2C clamp or
+specific pin collision. The user then explicitly requested restoring
+`cfg.output_power=true`, matching M5Unified's default and the old diagnostic
+app. Log the requested and actual M-Bus output state; preserve M5Unified's power
+protection and do not force the enable with direct register writes. The user
+confirmed that with `USE_MODULELLM=0 USE_MODULEDISPLAY=0` and CoreS3 USB power
+alone, ModuleLLM starts and startup/A audio, lip sync and resumption all work.
+This replaces the earlier blanket requirement for separate ModuleLLM USB power.
+However, serial capture after that confirmation still reports
+`setExtPower(true) is canceled` and `M-Bus power: requested=on actual=off`, while
+PCM is nonzero. The setting is true, but the output-state reading is not on;
+do not claim that the enable latch was verified or infer the exact supply path.
+Separate ModuleLLM USB power or removal remains a verified workaround when
+M-Bus output is not enabled.
+`USE_MODULELLM=0` selects the CoreS3 backend; it does not electrically isolate an
+attached ModuleLLM. Do not erase the existing personal calibration.
+
 ## ModuleLLM backend (2026-10-18)
 
 See `modulellm/README.md` for the verified device and build/deployment/rollback.
@@ -14,12 +78,15 @@ Both backends are integrated into main. `USE_MODULELLM` in `src/AppConfig.h`
 selects the microphone backend at compile time: 0 (default) is CoreS3, 1 is
 ModuleLLM over UART. Always use numeric `#if USE_MODULELLM`, not `#ifdef`.
 The `m5stack-cores3-modulellm-vowel` environment overrides it with
-`-DUSE_MODULELLM=1`; `m5stack-cores3-hello` uses the header default.
+`-DUSE_MODULELLM=1`; `m5stack-cores3` and its `m5stack-cores3-hello` alias use
+the header default. The old app is now `m5stack-cores3-legacy`. No app reads
+filesystem assets: all environments disable SPIFFS bundling, avoiding the
+Intel-only mkspiffs executable on Apple Silicon during ordinary build/upload.
 Both environments must build after backend changes. No hardware was flashed
 or remote services changed for this integration.
 CoreS3 RX=18 / TX=17 is confirmed by the M5Unified pin table, official example
 and actual bidirectional UART. Earlier prose reversing these pins was wrong.
-CoreS3 has been flashed with the ModuleLLM backend; its microphone is disabled.
+The earlier ModuleLLM verification used a different CoreS3 with its microphone disabled.
 AX630C device: Ubuntu 22.04.5 aarch64/glibc 2.35, g++ 11.4.0. No StackFlow audio
 or UART services were running. ALSA hw:0,0 requires 16 kHz S16_LE stereo; mono
 fails. Use arecord as the capture child, right channel by default, without
@@ -58,14 +125,15 @@ tested using temporary model files and a PTY instead. A 216-second live run had
 13,501 16-ms inputs, mean DSP 99 us/input (max 1,932 us), 479,892 UART bytes, no
 audio drops/queued-result replacement; systemd recorded 2.766 s total CPU time.
 
-The current default PlatformIO environment is `m5stack-cores3-hello`, a dual-display Avatar
+The current default PlatformIO environment is `m5stack-cores3`, an Avatar
 app in `src/hello_world.cpp`. It shows Hello World for 2000 ms, then renders an
 animated Avatar using `DualDisplayAvatar`. It also initializes CoreS3's LCD and
 touch through `M5.begin()` and uses M5Unified TouchButtons in the bottom 40 px.
 After the splash, CoreS3 shows the same Avatar state in a 320x200 viewport above
-the buttons (about 267x200 face); HDMI renders a 240x180 face at logical 320x180,
+the buttons (about 267x200 face). With `USE_MODULEDISPLAY=1`, HDMI renders a 240x180 face at logical 320x180,
 then ModuleDisplay enlarges it 4x for a 960x720 face on 1280x720@60 output.
-`m5stack-cores3-hello` sets `AVATAR_HDMI_SCALE=4`; the older `m5stack-cores3`
+`m5stack-cores3` and `m5stack-cores3-hello` set `AVATAR_HDMI_SCALE=4`;
+the older `m5stack-cores3-legacy`
 environment remains at 1. `CoreS3ModuleDisplay` reads dimensions and scale from
 `AppConfig.h` and explicitly configures the 720p output timing/scaling.
 `Avatar perf` logs the completed dual-display FPS and mean draw time every ~5 s.
@@ -85,10 +153,11 @@ buttons and restores the previous clip rectangle after each frame.
 The user confirmed both screens animate correctly and TouchButton A still plays
 the chime. The startup capture is `diagnostics/2026-10-17-dual-avatar.log`
 (ignored by Git).
-BtnA plays a two-note chime through ModuleDisplay HDMI; startup plays it too.
-`HdmiChime` configures a separate Speaker_Class for I2S1, BCK=6, DATA=13, LRCK=0,
-48 kHz stereo. The CoreS3 internal mic is enabled for FFT lip sync; internal
-speaker, IMU, RTC and external display autodetection are disabled.
+BtnA and startup play a two-note chime on the selected speaker. With ModuleDisplay
+enabled, `Chime` configures a separate Speaker_Class for I2S1, BCK=6, DATA=13,
+LRCK=0, 48 kHz stereo; otherwise it uses M5.Speaker and its CoreS3 codec callback.
+The CoreS3 internal mic is enabled for FFT lip sync when `USE_MODULELLM=0`.
+IMU, RTC and external display autodetection are disabled.
 `MicLipSync` records 16 kHz stereo, runs avatar-mic's 256-point FFT on released
 buffers, and shares the resulting mouth ratio between both render targets.
 FFT bins 5..60 cover 312.5..3750 Hz. Source and MIT license are vendored in
@@ -213,8 +282,8 @@ FFT frames with nonzero PCM/FFT levels. Native DSP tests pass with ASan/UBSan.
 The user subsequently confirmed that lip sync on both displays and BtnA's
 chime/resumption work normally on 2026-10-17.
 ModuleDisplay must be externally powered. Custom I2C probes are
-excluded from the default build. The original dual-display Avatar build remains
-`m5stack-cores3`.
+excluded from the default build. The original dual-display Avatar diagnostic
+build is `m5stack-cores3-legacy`.
 
 This project is built on the development Mac via VS Code Remote SSH. CoreS3 is
 connected to another Mac and flashed/monitored through the browser using
@@ -226,8 +295,8 @@ I2C (port -1) through `src/CoreS3ModuleDisplay.h`. The pins, SPI configuration,
 and video timing match stock M5ModuleDisplay. The user confirmed visible
 Hello World output with this combination. `m5stack-cores3-hdmi-hw` runs the stock
 hardware-I2C path; `m5stack-cores3-hdmi-diag` adds page-content readback after
-failed initialization. Neither is the default. Hello World does not bundle
-unused SPIFFS; the original dual-display Avatar build still does. See
+failed initialization. Neither is the default. No environment bundles
+unused SPIFFS, including the original diagnostic app. See
 `diagnostics/README.md` for evidence.
 The current HDMI Avatar uses the same software-I2C configuration and no
 filesystem assets. The user subsequently connected CoreS3 directly to this

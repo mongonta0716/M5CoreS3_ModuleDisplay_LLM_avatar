@@ -9,12 +9,15 @@
 class MicLipSync {
  public:
   bool begin() {
-    // Called only with the HDMI speaker stopped: both own I2S1 and GPIO0.
+    // Called only with the selected speaker stopped: both own I2S1.
     if (active_.load()) return true;
     pause();
     auto cfg = M5.Mic.config();
     cfg.sample_rate = MicFftAnalyzer::kSampleRate;
     M5.Mic.config(cfg);
+    Serial.printf("Mic config: I2S=%d MCLK=%d BCK=%d WS=%d DATA=%d stereo=%d gain=%u\n",
+                  int(cfg.i2s_port), cfg.pin_mck, cfg.pin_bck, cfg.pin_ws,
+                  cfg.pin_data_in, cfg.stereo, cfg.magnification);
     M5.Mic.setBufferReleaseCallback(this, onRecorded);
     analyzer_.reset(millis());
     vowels_.reset();
@@ -29,7 +32,7 @@ class MicLipSync {
       Serial.println("Mic FFT: initialization failed");
       return false;
     }
-    Serial.println("Mic FFT: ready, 16000 Hz stereo, 256 points, bins 5..60; I2S1 MCLK=0 BCK=34 WS=33 DATA=14");
+    Serial.println("Mic FFT: ready, 16000 Hz stereo, 256 points, bins 5..60");
     return true;
   }
 
@@ -37,7 +40,7 @@ class MicLipSync {
     // Stop requeuing before end() waits for the capture task to exit.
     active_.store(false);
     // Only release the capture lifecycle we own. Repeated A presses can
-    // arrive while the shared port already belongs to the HDMI speaker.
+    // arrive while the shared port already belongs to the selected speaker.
     if (ownsPort_) {
       M5.Mic.end();
       ownsPort_ = false;

@@ -1,14 +1,16 @@
-#include <M5ModuleDisplay.h>
 #include "AppConfig.h"
+#if USE_MODULEDISPLAY
+#include <M5ModuleDisplay.h>
 #ifdef HDMI_SOFTWARE_I2C
 #include "CoreS3ModuleDisplay.h"
 #endif
 #ifdef HDMI_READBACK_DIAGNOSTICS
 #include "HdmiDiagnostics.h"
 #endif
+#endif
 #ifdef HELLO_THEN_AVATAR
 #include "DualDisplayAvatar.h"
-#include "HdmiChime.h"
+#include "Chime.h"
 #if USE_MODULELLM
 #include "ModuleLlmLipSync.h"
 #else
@@ -19,17 +21,19 @@
 #endif
 
 namespace {
+#if USE_MODULEDISPLAY
 #ifdef HDMI_SOFTWARE_I2C
 CoreS3ModuleDisplay display(-1);
 #else
 M5ModuleDisplay display(app::kLogicalWidth, app::kLogicalHeight, 60,
                         1280, 720, app::kDisplayScale, app::kDisplayScale, 74250000);
 #endif
+#endif
 #ifdef HELLO_THEN_AVATAR
 DualDisplayAvatar avatar;
 bool avatarReady = false;
 constexpr uint32_t kHelloDurationMs = 2000;
-HdmiChime chime;
+Chime chime;
 #if USE_MODULELLM
 ModuleLlmLipSync lipSync;
 bool resumePending = false;
@@ -48,7 +52,7 @@ void playChime(const char* source) {
 #else
   resumePending = false;
 #endif
-  // CoreS3 mic MCLK and HDMI LRCK share GPIO0 and I2S1; use them in turn.
+  // Internal mic and the selected speaker share I2S1; use them in turn.
   lipSync.pause();
   avatar.setMouthOpenRatio(0);
   chimeActive = chime.begin() && chime.play(source);
@@ -60,7 +64,7 @@ void playChime(const char* source) {
 }
 
 void updateAudio() {
-  // PCM is 340 ms; allow DMA tail / HDMI output to finish before releasing I2S.
+  // PCM is 340 ms; allow the speaker DMA tail to finish before releasing I2S.
   if (chimeActive && millis() - chimeStartedAt >= 450 && !chime.isPlaying()) {
     chime.end();
     chimeActive = false;
@@ -190,14 +194,16 @@ void initTouchButtons() {
 #else
   cfg.internal_mic = true;  // Configure CoreS3 pins and ES7210 enable callback.
 #endif
-  cfg.internal_spk = false;
+  cfg.internal_spk = !USE_MODULEDISPLAY;
   cfg.internal_imu = false;
   cfg.internal_rtc = false;
   cfg.pmic_button = false;
   cfg.external_speaker_value = 0;
   cfg.external_display_value = 0;
-  cfg.output_power = false;  // ModuleDisplay has its own external supply.
+  cfg.output_power = true;  // Keep attached modules powered, as in M5Unified's default.
   M5.begin(cfg);
+  Serial.printf("M-Bus power: requested=on actual=%s\n",
+                M5.Power.getExtOutput() ? "on" : "off");
   M5.Display.setRotation(1);
   M5.Display.setBrightness(128);
   M5.setTouchButtonHeight(40);
@@ -205,7 +211,7 @@ void initTouchButtons() {
   M5.Display.setTextDatum(middle_center);
   M5.Display.setTextSize(2);
   M5.Display.setTextColor(TFT_WHITE, TFT_BLACK);
-  M5.Display.drawString("HDMI Avatar", 160, 70);
+  M5.Display.drawString(USE_MODULEDISPLAY ? "HDMI Avatar" : "CoreS3 Avatar", 160, 70);
   M5.Display.drawString("Tap A: Pi-Po", 160, 110);
   drawTouchButtons();
   Serial.printf("TouchButton: bottom %u px; touch=%s\n",
@@ -266,10 +272,16 @@ void recoverTouch() {
 
 void startAvatar(bool hdmiAvailable) {
   const bool coreReady = avatar.addDisplay(M5.Display, kTouchButtonHeight);
+#if USE_MODULEDISPLAY
   const bool hdmiReady = hdmiAvailable && avatar.addDisplay(display);
+#else
+  (void)hdmiAvailable;
+  const bool hdmiReady = false;
+#endif
   avatarReady = coreReady || hdmiReady;
   Serial.printf("Avatar targets: CoreS3=%s HDMI=%s\n",
-                coreReady ? "ready" : "unavailable", hdmiReady ? "ready" : "unavailable");
+                coreReady ? "ready" : "unavailable",
+                USE_MODULEDISPLAY ? (hdmiReady ? "ready" : "unavailable") : "disabled");
   if (avatarReady) {
     avatar.update(millis());
     Serial.println("Avatar: first frame rendered; animation running.");
@@ -284,25 +296,26 @@ void startAvatar(bool hdmiAvailable) {
 
 void setup() {
   Serial.begin(115200);
+  Serial.printf("\nConfig: USE_MODULELLM=%d USE_MODULEDISPLAY=%d\n", USE_MODULELLM, USE_MODULEDISPLAY);
 #ifdef HELLO_THEN_AVATAR
-#if USE_MODULELLM
-  Serial.println("\nAPP: Hello World -> Avatar (CoreS3 + HDMI + ModuleLLM UART vowels)");
-#else
-  Serial.println("\nAPP: Hello World -> Avatar (CoreS3 + HDMI + mic FFT)");
-#endif
+  Serial.printf("\nAPP: Hello World -> Avatar (CoreS3%s + %s)\n",
+                USE_MODULEDISPLAY ? " + HDMI" : "",
+                USE_MODULELLM ? "ModuleLLM UART vowels" : "mic FFT");
 #else
   Serial.println("\nTEST: ModuleDisplay Hello World (M5GFX only)");
 #endif
+#if USE_MODULEDISPLAY
   Serial.println("HDMI test: M5GFX 0.2.33 / transmitter ACK fix #339");
 #ifdef HDMI_SOFTWARE_I2C
   Serial.println("HDMI test: software I2C port=-1 SDA=12 SCL=11");
+#endif
 #endif
   Serial.printf("Build: %s %s; free PSRAM=%u\n", __DATE__, __TIME__,
                 ESP.getFreePsram());
 #ifdef HELLO_THEN_AVATAR
   // Initialize CoreS3 touch/LCD before the separate software-I2C HDMI path.
   initTouchButtons();
-  if (!logTouchHealth("before HDMI")) recoverTouch();
+  if (!logTouchHealth(USE_MODULEDISPLAY ? "before HDMI" : "after CoreS3 init")) recoverTouch();
 #if USE_MODULELLM
   lipSync.begin();
 #else
@@ -310,6 +323,7 @@ void setup() {
 #endif
 #endif
   // ModuleDisplay is externally powered and initialized separately.
+#if USE_MODULEDISPLAY
   if (!display.init()) {
     Serial.println("HelloWorld: HDMI initialization failed; text was not drawn.");
 #ifdef HDMI_READBACK_DIAGNOSTICS
@@ -335,6 +349,15 @@ void setup() {
   display.drawString("Hello World", display.width() / 2, display.height() / 2);
   Serial.printf("HelloWorld: text drawn on HDMI %dx%d\n",
                 display.width(), display.height());
+#else
+  Serial.println("ModuleDisplay: disabled; using CoreS3 LCD and speaker.");
+  auto& lcd = M5.Display;
+  lcd.fillRect(0, 0, lcd.width(), lcd.height() - kTouchButtonHeight, TFT_NAVY);
+  lcd.setTextColor(TFT_WHITE, TFT_NAVY);
+  lcd.setTextSize(3);
+  lcd.setTextDatum(middle_center);
+  lcd.drawString("Hello World", lcd.width() / 2, (lcd.height() - kTouchButtonHeight) / 2);
+#endif
 #ifdef HELLO_THEN_AVATAR
   const uint32_t helloShownAt = millis();
   playChime("startup");
@@ -344,7 +367,7 @@ void setup() {
   }
   Serial.printf("HelloWorld: held for %u ms; starting Avatar\n",
                 static_cast<unsigned>(millis() - helloShownAt));
-  startAvatar(true);
+  startAvatar(USE_MODULEDISPLAY);
 #endif
 }
 

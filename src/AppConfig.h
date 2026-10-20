@@ -12,6 +12,15 @@
 #error "USE_MODULELLM must be 0 or 1"
 #endif
 
+// 0: CoreS3 LCD/speaker only; 1: add ModuleDisplay HDMI video/audio.
+#ifndef USE_MODULEDISPLAY
+#define USE_MODULEDISPLAY 0
+#endif
+
+#if USE_MODULEDISPLAY != 0 && USE_MODULEDISPLAY != 1
+#error "USE_MODULEDISPLAY must be 0 or 1"
+#endif
+
 // 1: native 1280x720, 2: 640x360 -> 720p, 4: 320x180 -> 720p.
 // Scaling is performed by ModuleDisplay, keeping the HDMI signal at 720p.
 #ifndef AVATAR_HDMI_SCALE

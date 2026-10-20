@@ -4,13 +4,15 @@
 #include <algorithm>
 #include <array>
 #include <cmath>
+#include "AppConfig.h"
 
-class HdmiChime {
+class Chime {
  public:
   bool begin() {
     if (ready_) return true;
     auto cfg = speaker_.config();
-    // Same CoreS3 / ModuleDisplay I2S mapping as M5Unified::_begin_audio.
+    // Use M5Unified's CoreS3 codec callback for the internal speaker.
+#if USE_MODULEDISPLAY
     cfg.pin_bck = 6;
     cfg.pin_data_out = 13;
     cfg.pin_ws = 0;
@@ -19,6 +21,9 @@ class HdmiChime {
     cfg.stereo = true;
     cfg.buzzer = false;
     cfg.use_dac = false;
+#else
+    cfg.sample_rate = kSampleRate;
+#endif
     speaker_.config(cfg);
     speaker_.setVolume(128);
     // Keep this immutable buffer alive while the background speaker task plays.
@@ -26,8 +31,9 @@ class HdmiChime {
     makeNote(100, 90, 1318.51f);
     makeNote(210, 110, 880.0f);
     ready_ = speaker_.begin();
-    Serial.printf("HDMI audio: %s, 48000 Hz stereo, BCK=6 DATA=13 LRCK=0\n",
-                  ready_ ? "ready" : "initialization failed");
+    Serial.printf("%s audio: %s, 48000 Hz BCK=%d DATA=%d WS=%d\n",
+                  outputName(), ready_ ? "ready" : "initialization failed",
+                  cfg.pin_bck, cfg.pin_data_out, cfg.pin_ws);
     return ready_;
   }
 
@@ -35,7 +41,7 @@ class HdmiChime {
     if (!ready_) return false;
     const bool queued = speaker_.playRaw(samples_.data(), samples_.size(),
                                          kSampleRate, false, 1, 0, true);
-    Serial.printf("HDMI chime: %s %s\n", source, queued ? "queued" : "failed");
+    Serial.printf("%s chime: %s %s\n", outputName(), source, queued ? "queued" : "failed");
     return queued;
   }
 
@@ -50,8 +56,14 @@ class HdmiChime {
   static constexpr uint32_t kSampleRate = 48000;
   static constexpr size_t kSamplesPerMs = kSampleRate / 1000;
   std::array<int16_t, 340 * kSamplesPerMs> samples_{};
+#if USE_MODULEDISPLAY
   m5::Speaker_Class speaker_;
+#else
+  m5::Speaker_Class& speaker_ = M5.Speaker;
+#endif
   bool ready_ = false;
+
+  static const char* outputName() { return USE_MODULEDISPLAY ? "HDMI" : "CoreS3"; }
 
   void makeNote(size_t startMs, size_t durationMs, float frequency) {
     const size_t count = durationMs * kSamplesPerMs;
