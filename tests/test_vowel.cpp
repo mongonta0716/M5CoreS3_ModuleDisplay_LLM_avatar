@@ -114,40 +114,6 @@ int main() {
     analyzer.process(samples.data(), 256);
     assert(analyzer.result().vowel == Vowel::Unknown);
   }
-  const auto a = vowelMouthPose(Vowel::A, 1, 1);
-  const auto i = vowelMouthPose(Vowel::I, 1, 1);
-  const auto u = vowelMouthPose(Vowel::U, 1, 1);
-  const auto o = vowelMouthPose(Vowel::O, 1, 1);
-  assert(a.height > i.height && i.width > a.width && u.width < a.width);
-  assert(o.roundness > a.roundness);
-  // Distinctions must survive modest volume/confidence and 4x HDMI's 0.75
-  // source-to-canvas scale, rather than only appearing at maximum opening.
-  for (float open : {0.08f, 0.15f, 0.4f, 1.0f}) {
-    for (float confidence : {0.3f, 0.6f, 1.0f}) {
-      const auto aa = vowelMouthPose(Vowel::A, confidence, open);
-      const auto ii = vowelMouthPose(Vowel::I, confidence, open);
-      const auto uu = vowelMouthPose(Vowel::U, confidence, open);
-      const auto ee = vowelMouthPose(Vowel::E, confidence, open);
-      assert(aa.height > ee.height * 1.6f);
-      assert(ee.width > uu.width * 2.0f);
-      assert(uu.roundness > ee.roundness + 0.4f);
-      assert(std::lround(ee.height * 0.75f) - std::lround(ii.height * 0.75f) >= 5);
-      assert(aa.label == Vowel::A && uu.label == Vowel::U && ee.label == Vowel::E);
-    }
-  }
-  assert(vowelMouthPose(Vowel::A, 0.1f, 0.5f).label == Vowel::Unknown);
-  assert(vowelMouthPose(Vowel::A, 1, 0).label == Vowel::Unknown);
-  assert(vowelMouthPose(Vowel::I, 0.8f, 0.015f).label == Vowel::I);
-  MouthPose pose;
-  for (uint32_t elapsed : {0u, 16u, 100u, 250u, 5000u, UINT32_MAX}) {
-    smoothMouthPose(pose, o, elapsed);
-    assert(std::isfinite(pose.width) && std::isfinite(pose.height) && std::isfinite(pose.roundness));
-    assert(pose.width >= o.width && pose.width <= 90);
-    assert(pose.height >= 4 && pose.height <= o.height);
-    assert(pose.roundness >= 0 && pose.roundness <= 1);
-  }
-  const auto closed = vowelMouthPose(Vowel::A, 1, 0);
-  assert(closed.height == 4);
   auto invalid = model; invalid.f1[0] = NAN;
   assert(!invalid.valid());
   // Guided collection accepts unique completed frames, handles time rollover,
@@ -221,5 +187,5 @@ int main() {
   assert(calibration.status(10000) == VowelCalibration::Status::Invalid);
   invalid = model; invalid.f1[0] = model.f1[1]; invalid.f2[0] = model.f2[1];
   assert(!invalid.valid());
-  std::puts("Vowel DSP and mouth pose tests passed");
+  std::puts("Vowel DSP and calibration tests passed");
 }

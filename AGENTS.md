@@ -71,6 +71,34 @@ M-Bus output is not enabled.
 `USE_MODULELLM=0` selects the CoreS3 backend; it does not electrically isolate an
 attached ModuleLLM. Do not erase the existing personal calibration.
 
+The latest-official comparison on 2026-10-20 uses M5Unified 0.2.26 (already
+installed; master is the same release) and temporarily sets output_power=false.
+The user confirmed ModuleLLM stays off, A is audible, and lip sync stays stopped
+even after A. Raw serial reads show continuing all-zero PCM; one earlier startup
+capture was nonzero, so startup/monitor/power history remains a variable.
+The new `enable_latch` log label is intentional: getExtOutput reads BUS_OUT_EN,
+not the physical bus voltage. Additional power probes only read registers.
+Official CoreS3 issue #72 and M5Unified PRs #352/#381 describe related power-path
+protection and switching problems, but do not establish this exact mic failure.
+See diagnostics/README.md for sourced comparisons and remaining uncertainties.
+
+## Rendering library integration (2026-10-22)
+
+The four normal environments now fetch M5Unified-Avatar from GitHub, pinned to
+`e92d62012a015511567e8ae76f042428e018a6d8`. Do not reintroduce a sibling-directory
+symlink as the default dependency. The legacy diagnostic retains its old pin.
+`DualDisplayAvatar` only adapts commands, demo/performance logs and DSP labels to
+`m5avatar::MultiDisplayAvatar`; vowel poses, balloons, scaling and multiple-screen
+rendering live in the library. Its native tests cover pose math and real M5GFX
+framebuffers, Japanese text, clip restoration and reserved button rows.
+The CoreS3 local-mic/local-display firmware was flashed with output_power=true.
+The user confirmed normal Avatar/balloon display, lip sync, A audio and resumption
+on 2026-10-22. Earlier output_power=false observations remain historical evidence.
+The current platformio.ini also has USE_MODULEDISPLAY=1 in the common build
+flags, overriding the header's display default for inheriting environments.
+Preserve the user's working setting; remove this common override before using
+the documented standalone environment matrix.
+
 ## ModuleLLM backend (2026-10-18)
 
 See `modulellm/README.md` for the verified device and build/deployment/rollback.

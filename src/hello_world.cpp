@@ -46,6 +46,18 @@ bool chimeActive = false;
 uint32_t chimeStartedAt = 0;
 constexpr uint16_t kTouchButtonHeight = 40;
 
+void logPowerState(const char* stage) {
+  uint8_t ports[2] = {}, status = 0, ldo = 0;
+  const bool ioOk = M5.In_I2C.readRegister(0x58, 0x02, ports, sizeof(ports), 100000);
+  const bool statusOk = M5.In_I2C.readRegister(0x34, 0x00, &status, 1, 100000);
+  const bool ldoOk = M5.In_I2C.readRegister(0x34, 0x90, &ldo, 1, 100000);
+  Serial.printf("Power check (%s): IO=%d P0=%02x P1=%02x BUS_EN=%d BOOST_EN=%d "
+                "PMIC=%d status=%02x LDO=%d/%02x VBUS=%.3fV TS=%.3fV\n",
+                stage, ioOk, ports[0], ports[1], !!(ports[0] & 0x02), !!(ports[1] & 0x80),
+                statusOk, status, ldoOk, ldo,
+                M5.Power.Axp2101.getVBUSVoltage(), M5.Power.Axp2101.getTSVoltage());
+}
+
 void playChime(const char* source) {
 #if !USE_MODULELLM
   calibration.cancel(millis());
@@ -202,8 +214,9 @@ void initTouchButtons() {
   cfg.external_display_value = 0;
   cfg.output_power = true;  // Keep attached modules powered, as in M5Unified's default.
   M5.begin(cfg);
-  Serial.printf("M-Bus power: requested=on actual=%s\n",
-                M5.Power.getExtOutput() ? "on" : "off");
+  Serial.printf("M-Bus power: requested=%s enable_latch=%s\n",
+                cfg.output_power ? "on" : "off", M5.Power.getExtOutput() ? "on" : "off");
+  logPowerState("after M5.begin");
   M5.Display.setRotation(1);
   M5.Display.setBrightness(128);
   M5.setTouchButtonHeight(40);

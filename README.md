@@ -4,10 +4,25 @@ M5Stack CoreS3のAvatarを、内蔵マイクまたはModuleLLMの音声解析で
 ModuleDisplayを使うと、本体LCDに加えてHDMIモニターにも表示できます。
 アバターには指定の[M5Unified-Avatar](https://github.com/mongonta0716/M5Unified-Avatar)を使用しています。
 
+## 描画ライブラリ
+
+母音の口形・補間、日本語吹き出し、複数画面の同期描画は、
+`M5Unified-Avatar`リポジトリの`m5avatar::MultiDisplayAvatar`へ移しました。
+このアプリの`DualDisplayAvatar`は操作・デモ・性能ログとDSPの母音型の変換を担当します。
+マイク解析と個人調整値の保存は引き続きアプリ／ModuleLLM側です。
+
+PlatformIOはGitHub上の描画APIを含むコミット`e92d62012a015511567e8ae76f042428e018a6d8`から
+ライブラリを取得します。隣のディレクトリへのローカルチェックアウトは不要です。
+ライブラリだけで使う場合は`MultiDisplayAvatar.h`をincludeし、初期化済み画面を
+`addDisplay(display, reservedBottom)`で登録して、`setVowel`・`setMouthOpenRatio`・
+`setBalloon`を設定しながら`update(millis())`を呼びます。
+
 ## 構成の切り替え（USE_MODULELLM / USE_MODULEDISPLAY）
 
 `src/AppConfig.h`の2つの値で、コンパイル時に使用するモジュールを選択します。
-既定値はどちらも`0`で、CoreS3単体で動作します。
+ヘッダーの既定値はどちらも`0`です。現在の`platformio.ini`では実機構成に合わせ、
+共通ビルドフラグで`USE_MODULEDISPLAY=1`を指定しています。この指定は継承先にも適用されます。
+以下は、その共通指定を外した場合の環境ごとの標準構成です。
 
 | USE_MODULELLM | USE_MODULEDISPLAY | マイク・解析先 | 表示・音声出力 | PlatformIO環境 |
 | --- | --- | --- | --- | --- |
@@ -16,11 +31,12 @@ ModuleDisplayを使うと、本体LCDに加えてHDMIモニターにも表示で
 | `1` | `0` | ModuleLLM内蔵マイク・AX630C | 本体LCD・本体スピーカー | `m5stack-cores3-modulellm-vowel` |
 | `1` | `1` | ModuleLLM内蔵マイク・AX630C | 本体LCD＋HDMI・HDMI音声 | `m5stack-cores3-modulellm-display` |
 
-通常の`pio run`と`pio run -e m5stack-cores3`は、ヘッダーの値を使います。
+通常の`pio run`と`pio run -e m5stack-cores3`は、共通ビルドフラグとヘッダーの値を使います。
 `m5stack-cores3-hello`も同じアプリの互換用エイリアスです。
 上表の追加モジュール用環境は、対応する値を`-D...=1`で上書きします。
 ビルドフラグがヘッダーより優先されるため、モジュールを無効に戻す場合は
-ヘッダーを`0`に戻して`m5stack-cores3`で再ビルド・書き込みしてください。
+共通フラグの`-DUSE_MODULEDISPLAY=1`も外し、ヘッダーを`0`にして
+`m5stack-cores3`で再ビルド・書き込みしてください。
 古い診断用`m5stack-cores3-legacy`はこの切り替えの対象外です。
 
 `USE_MODULEDISPLAY=0`ではHDMIへのアクセスを行わず、Hello WorldとAvatarを本体LCDに表示し、
@@ -34,7 +50,8 @@ ModuleDisplayを使うと、本体LCDに加えてHDMIモニターにも表示で
 ModuleLLM未接続時も画面とAの操作は継続します。
 
 ModuleLLMの給電はこれらのフラグとは別です。CoreS3からのM-Bus給電は、M5Unified標準と同じ
-`cfg.output_power=true`で有効化を要求します。起動ログの`M-Bus power: requested=on actual=...`で実際の状態を確認できます。
+`cfg.output_power=true`で有効化を要求します。
+起動ログの`M-Bus power: requested=... enable_latch=...`は要求とBUS_OUT_ENの制御状態を示し、実際の5V電圧を測定した値ではありません。
 CoreS3＋ModuleLLMを重ねた`USE_MODULELLM=0` / `USE_MODULEDISPLAY=0`の実機では、CoreS3のUSB1本で
 ModuleLLMが起動し、起動音・Aの音・口パク・A再生後の復帰が正常なことを確認しました。
 この動作確認後も`setExtPower(true) is canceled`と`actual=off`のログが残っており、実際の給電経路と状態判定の関係は未確認です。
@@ -43,6 +60,8 @@ ModuleLLMが起動し、起動音・Aの音・口パク・A再生後の復帰が
 同じファームウェアで、ModuleLLMを取り外すか、そのUSB-Cにも給電すると音と口パクが動くことを確認済みです。
 M-Busからの給電が有効にならない場合は、ModuleLLM側にもUSB給電するか、使用しないモジュールを取り外してください。
 未給電時に影響を受ける内部信号や電気的な仕組みまでは特定していません。
+最新安定版0.2.26でも`false`時の同じ現象を確認しました。公式報告との照合結果は
+[電源・マイクの調査記録](diagnostics/README.md#cores3modulellmの電源と内蔵マイク2026-10-20)を参照してください。
 
 ```sh
 # AppConfig.hの値でビルド・書き込み（既定はCoreS3単体）
@@ -320,16 +339,16 @@ Aの発音と再生後の口パク復帰をユーザーが実機確認済みで�
 - `src/MicLipSync.h`: 内蔵マイクの録音、完了通知からのFFT処理。
 - `src/MicFftAnalyzer.h`: FFTの帯域集計、感度調整、口の開閉の平滑化。
 - `src/VowelAnalyzer.h` / `src/LpcFormants.h`: 有声判定、LPCの極からのF1/F2推定、母音判定の継続処理。
-- `src/VowelModel.h` / `src/VowelMouth.h`: 母音の特徴値、幅・高さ・丸みを変える口パーツ、日本語の母音を表示する吹き出し。
+- `src/VowelModel.h`: 母音モデル・特徴値と判定処理。口形と吹き出しの描画はライブラリの`VowelMouth`が担当します。
 - `src/VowelCalibration*.h`: 段階的な声の調整とNVS保存。
 - `lib/AvatarMicFFT`: avatar-micから取り込んだFFTとMITライセンス。
 - `src/AppConfig.h`: マイク・ModuleDisplayの有無、HDMIの論理解像度・ハードウェア拡大率。
-- `src/DualDisplayAvatar.*`: 顔の配置、2画面への描画、共通のアニメーション状態。
+- `src/DualDisplayAvatar.*`: ライブラリ描画APIへの接続、DSPの母音型の変換、操作・デモ・性能ログ。
 
-M5Unified-Avatarはコミット`69e8045bf98f49509611563b9d16ea433c7b8ea7`に固定しています。
-この版の標準コンストラクターには720×1280の固定値があるため、`Face`の詳細コンストラクターで各画面に合ったパーツ配置とキャンバスを渡しています。
-また、`Avatar::start()`の描画タスクハンドルはライブラリ全体で共有されるため、2つの描画タスクを起動せず、共通の`DrawContext`相当の状態を使って`Face::draw()`を順に呼びます。
-これにより、同じSPIバスを使用する本体LCDとModuleDisplayの描画を直列に実行します。ライブラリ本体の変更は不要です。
+通常の4構成はM5Unified-Avatarのコミット`e92d62012a015511567e8ae76f042428e018a6d8`に固定しています。
+ライブラリの`MultiDisplayAvatar`が、各画面の論理解像度に合った顔とキャンバスを作り、
+共通のアニメーション状態を使って順番に描画します。既存の`Avatar::start()`の描画タスクは起動しません。
+`m5stack-cores3-legacy`だけは比較用に以前のコミット`69e8045bf98f49509611563b9d16ea433c7b8ea7`を参照します。
 
 FFTの単体テストはMac上で次のように実行できます。
 
