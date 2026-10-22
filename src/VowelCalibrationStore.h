@@ -9,13 +9,13 @@ struct SavedModel {
   uint32_t version = 2;  // LPC-root calibration; version 1 used envelope peaks.
   VowelModel model;
 };
-inline VowelModel load() {
+inline VowelModel load(const char* key = "model") {
   Preferences prefs;
   SavedModel saved;
   bool ok = false;
   if (prefs.begin("vowel-lipsync", false)) {
-    ok = prefs.isKey("model") && prefs.getBytesLength("model") == sizeof(saved) &&
-         prefs.getBytes("model", &saved, sizeof(saved)) == sizeof(saved) &&
+    ok = prefs.isKey(key) && prefs.getBytesLength(key) == sizeof(saved) &&
+         prefs.getBytes(key, &saved, sizeof(saved)) == sizeof(saved) &&
          saved.magic == 0x564F574C && (saved.version == 1 || saved.version == 2) && saved.model.valid();
     prefs.end();
   }
@@ -29,20 +29,20 @@ inline VowelModel load() {
                   model.f1[i], model.f2[i]);
   return model;
 }
-inline bool save(const VowelModel& model) {
+inline bool save(const VowelModel& model, const char* key = "model") {
   if (!model.valid()) return false;
   Preferences prefs;
   if (!prefs.begin("vowel-lipsync", false)) return false;
   SavedModel saved;
   saved.model = model;
-  const bool ok = prefs.putBytes("model", &saved, sizeof(saved)) == sizeof(saved);
+  const bool ok = prefs.putBytes(key, &saved, sizeof(saved)) == sizeof(saved);
   prefs.end();
   return ok;
 }
-inline bool reset() {
+inline bool reset(const char* key = "model") {
   Preferences prefs;
   if (!prefs.begin("vowel-lipsync", false)) return false;
-  const bool ok = !prefs.isKey("model") || prefs.remove("model");
+  const bool ok = !prefs.isKey(key) || prefs.remove(key);
   prefs.end();
   return ok;
 }

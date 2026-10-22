@@ -1,8 +1,57 @@
-# CoreS3 + ModuleLLM + Display Module 13.2 Avatar
+# M5Unified Avatar Mic
 
-M5Stack CoreS3のAvatarを、内蔵マイクまたはModuleLLMの音声解析で口パクさせるPlatformIO / Arduinoプロジェクトです。
-ModuleDisplayを使うと、本体LCDに加えてHDMIモニターにも表示できます。
+M5Stack CoreS3／AtomS3RのAvatarを、マイクの音声解析で口パクさせるPlatformIO / Arduinoプロジェクトです。
+CoreS3では内蔵マイクまたはModuleLLM、AtomS3RではEchoBaseまたはPDMUnitを使用します。
+CoreS3でModuleDisplayを使うと、本体LCDに加えてHDMIモニターにも表示できます。
 アバターには指定の[M5Unified-Avatar](https://github.com/mongonta0716/M5Unified-Avatar)を使用しています。
+
+## AtomS3R＋EchoBase／PDMUnit
+
+AtomS3R向けには`env:AtomS3`を選択します。CoreS3の設定は継承しつつ、
+音声入力・画面のフラグを環境内で明示して切り替えます。
+AtomS3R環境ではModuleLLM／ModuleDisplayの機能を無効にし、両モジュールを初期化しません。
+この環境はAtomS3Rの8MB Flash／8MB Octal PSRAM／128×128 LCDを対象にしています。
+通常のAtomS3（PSRAMなし）向け設定ではありません。
+
+```sh
+pio run -e AtomS3
+pio run -e AtomS3 -t upload
+pio device monitor -e AtomS3
+```
+
+起動時にEchoBaseのES8311（GPIO38=SDA、GPIO39=SCL、I²Cアドレス`0x18`）を確認します。
+応答すればEchoBaseを優先し、応答しなければGroveへ接続したPDMUnitを選択します。
+PDMの接続は白=CLK（GPIO1）、黄=DATA（GPIO2）、赤=5V、黒=GNDです。
+PDMUnitにはI²Cの識別情報がないため、非接続でもPDM側が選ばれます。
+入力の選択は起動時に行います。機器を変更するときは電源を切って接続し直してください。
+
+AはAtomS3R本体の画面を押し込むボタンです。
+
+| AtomS3RのボタンA | 動作 |
+| --- | --- |
+| 3秒未満で離す | Cal：静音2秒→各母音3秒×2回、発声の間に息つぎ2秒 |
+| 3秒間押し続ける | 現在選択中の入力の調整値をリセット（1回だけ） |
+
+長押しを離したときにCalは開始しません。調整中の単押しは調整を最初から開始します。
+128×128画面では、調整・保存結果を読みやすい専用画面へ表示し、その後Avatarへ戻ります。
+通常時はライブラリのAvatarと母音表示を使い、画面下部のタッチボタンは描きません。
+EchoBaseでは起動時に「ピポ」を鳴らし、再生を終えてから録音を始めます。
+PDMUnitにはスピーカーがないため起動音はありません。CoreS3のA/B/C操作は従来どおりです。
+
+録音にはM5Unified 0.2.26の標準`M5.Mic`を使います。
+EchoBaseでは`external_speaker.atomic_echo`によるコーデック初期化と、
+ES8311に合わせた左チャンネル入力・左右チャンネルへの起動音出力、
+PDMではI2S0のPDM入力を設定し、共通のFFT・フォルマント解析へ渡します。
+EchoBase用とPDM用の調整値は別のNVSキーへ保存し、CoreS3用の既存値も保持します。
+初めて選択した入力ではAを単押しして調整してください。
+シリアルの`c`（Cal）、`x`（現在の入力のリセット）も利用できます。
+
+AtomS3R＋EchoBaseでは、表示・起動音・口パク、Aの単押し／3秒長押し、
+調整案内・保存・口パクへの復帰を実機で確認済みです。PDMUnitの実機確認は未実施です。
+
+自動選択は[washishi氏の参考実装](https://github.com/washishi/m5stack-avatar-mic-nekomimi_led/blob/main/src/main.cpp)を参考にしています。
+旧版で使用されていた別のI2Sドライバーは併用せず、M5Unifiedが録音とスピーカーのポートを管理します。
+ボード定義は[M5Stack公式のAtomS3R設定](https://github.com/m5stack/M5Utility/blob/main/boards/m5stack-atoms3r.json)に基づきます。
 
 ## 描画ライブラリ
 

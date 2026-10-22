@@ -11,6 +11,7 @@
 #ifdef HELLO_THEN_AVATAR
 #include "DualDisplayAvatar.h"
 #include "Chime.h"
+#include "CalibrationText.h"
 #if USE_MODULELLM
 #include "ModuleLlmLipSync.h"
 #else
@@ -153,31 +154,8 @@ void updateCalibrationBalloon() {
 #if USE_MODULELLM
   const auto& calibration = lipSync.calibration();
 #endif
-  const auto status = calibration.status(millis());
   String title, detail;
-  if (calibration.active()) {
-    static const char* labels[] = {"静かに", "あー", "いー", "うー", "えー", "おー"};
-    if (calibration.resting()) {
-      title = "息つぎ";
-      detail = String("あと") + calibration.secondsLeft(millis()) + "秒";
-    } else if (calibration.step() == 0) {
-      title = "声の調整";
-      detail = String("静かに ") + calibration.secondsLeft(millis()) + "秒";
-    } else {
-      title = String(labels[calibration.step()]) + " " + calibration.round() + "回目";
-      detail = String("あと") + calibration.secondsLeft(millis()) + "秒";
-    }
-  } else {
-    switch (status) {
-      case VowelCalibration::Status::Complete: title = "声の調整"; detail = "保存完了"; break;
-      case VowelCalibration::Status::Insufficient: title = "音声不足"; detail = "Bで再調整"; break;
-      case VowelCalibration::Status::Invalid: title = "母音不安定"; detail = "Bで再調整"; break;
-      case VowelCalibration::Status::Cancelled: title = "声の調整"; detail = "中止"; break;
-      case VowelCalibration::Status::Reset: title = "声の調整"; detail = "初期値です"; break;
-      case VowelCalibration::Status::SaveFailed: title = "保存に失敗"; detail = "Bで再調整"; break;
-      default: break;
-    }
-  }
+  calibrationText(calibration, millis(), "Bで再調整", title, detail);
   avatar.setBalloon(title, detail);
 }
 

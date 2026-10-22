@@ -8,7 +8,8 @@ archive=$(mktemp "${TMPDIR:-/tmp}/modulellm-vowel.XXXXXX")
 trap 'rm -f -- "$archive"' EXIT
 COPYFILE_DISABLE=1 tar --no-xattrs --exclude=modulellm/modulellm-vowel -czf "$archive" \
   modulellm src/VowelWire.h src/VowelModel.h src/VowelAnalyzer.h src/LpcFormants.h \
-  src/VowelCalibration.h src/MicFftAnalyzer.h lib/AvatarMicFFT tests scripts/test_native.sh
+  src/VowelCalibration.h src/MicFftAnalyzer.h src/CalibrationButton.h src/AtomAudioProfile.h \
+  lib/AvatarMicFFT tests scripts/test_native.sh
 ssh "$host" "set -eu
 mkdir -p '$remote_release'
 tar -xzf - -C '$remote_release'" < "$archive"

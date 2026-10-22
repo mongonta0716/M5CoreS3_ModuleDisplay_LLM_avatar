@@ -7,6 +7,45 @@ recognition of all Japanese kana. Use a locally configured SSH host to access
 ModuleLLM; `modulellm-host` in examples is a placeholder. Inspect installed
 audio/UART services before use.
 
+## AtomS3R frontend
+
+`env:AtomS3` builds src/atom_s3.cpp for AtomS3R (8MB flash, Octal PSRAM via
+qio_opi, 128x128 LCD), using boards/m5stack-atoms3r.json based on M5Stack's
+M5Utility definition. Its complete build_flags list deliberately overrides the
+CoreS3 common ModuleDisplay flag and forces both module flags to zero. The
+legacy source filter must exclude atom_s3.cpp to avoid duplicate setup/loop.
+Boot probes EchoBase's ES8311 at 0x18 on SDA38/SCL39 before M5.begin. ACK selects
+M5Unified external_speaker.atomic_echo; otherwise configure PDM RX on I2S0,
+CLK1/DATA2. PDM selection is a fallback, not proof of physical presence.
+Keep M5Unified as the sole I2S owner; its mono capture is duplicated by record()
+into MicLipSync's stereo output buffer. Stop the startup EchoBase chime before
+starting capture. ES8311 defaults to its left slot: set mic.left_channel=true
+for EchoBase and speaker.stereo=true to send the mono chime into both slots.
+The first version used M5Unified's default right-only I/O; EchoBase ACK and
+register writes succeeded, but the user reported no sound or lip sync. The
+user confirmed both work after the slot correction. PDM keeps its own input
+channel setting. PDM has no startup speaker output.
+A short release starts calibration; reaching 3000ms resets the selected profile
+once and suppresses calibration on release. CalibrationButton has native tests
+for thresholds, delayed polling and rollover. Per-input NVS keys atom-echo and
+atom-pdm preserve CoreS3's default model key. A reset affects only the selected
+input. CalibrationText shares the prompts with CoreS3; Atom renders a dedicated
+readable calibration screen rather than the fixed-size two-line face balloon.
+Do not flash a connected CoreS3 while verifying this frontend: identify the
+user's AtomS3R first. Build AtomS3 and the four CoreS3 environments after changes
+to shared calibration/audio code. AtomS3 and all four CoreS3 combinations
+built successfully (the compatibility check used a temporary config without
+the user's common display override). Native ASan/UBSan tests passed.
+AtomS3R+EchoBase was flashed through normal PlatformIO upload, preserving NVS.
+Serial confirms 128x128 LCD, 8MB PSRAM, EchoBase ACK, continuous capture and
+about 15.2fps rendering. The user confirmed display, startup audio and lip sync
+after the slot correction. The user also confirmed on 2026-10-22 that A's
+3-second reset, suppression of calibration on release, short-press calibration,
+readable prompts, saving and return to lip sync all work on AtomS3R+EchoBase.
+This verifies the operation flow, not a measured vowel-recognition accuracy.
+PDMUnit hardware is not yet verified. Preserve the working firmware and saved
+calibration; do not reset NVS or publish personal model values.
+
 ## Module selection (2026-10-20)
 
 `USE_MODULELLM` selects the microphone backend and `USE_MODULEDISPLAY` selects

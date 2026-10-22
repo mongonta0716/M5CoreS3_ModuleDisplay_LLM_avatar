@@ -11,7 +11,7 @@ class Chime {
   bool begin() {
     if (ready_) return true;
     auto cfg = speaker_.config();
-    // Use M5Unified's CoreS3 codec callback for the internal speaker.
+    // Use M5Unified's codec callback for the detected local speaker.
 #if USE_MODULEDISPLAY
     cfg.pin_bck = 6;
     cfg.pin_data_out = 13;
@@ -63,7 +63,7 @@ class Chime {
 #endif
   bool ready_ = false;
 
-  static const char* outputName() { return USE_MODULEDISPLAY ? "HDMI" : "CoreS3"; }
+  static const char* outputName() { return USE_MODULEDISPLAY ? "HDMI" : (APP_ATOMS3 ? "EchoBase" : "CoreS3"); }
 
   void makeNote(size_t startMs, size_t durationMs, float frequency) {
     const size_t count = durationMs * kSamplesPerMs;

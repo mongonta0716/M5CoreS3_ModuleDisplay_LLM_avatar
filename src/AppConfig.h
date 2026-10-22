@@ -2,7 +2,7 @@
 
 #include <stdint.h>
 
-// 0: CoreS3 microphone and local DSP; 1: ModuleLLM microphone/DSP over UART.
+// 0: local microphone and DSP; 1: ModuleLLM microphone/DSP over UART.
 // A build flag (-DUSE_MODULELLM=0 or 1) overrides this default.
 #ifndef USE_MODULELLM
 #define USE_MODULELLM 0
@@ -12,13 +12,21 @@
 #error "USE_MODULELLM must be 0 or 1"
 #endif
 
-// 0: CoreS3 LCD/speaker only; 1: add ModuleDisplay HDMI video/audio.
+// 0: local LCD/speaker; 1: add ModuleDisplay HDMI video/audio.
 #ifndef USE_MODULEDISPLAY
 #define USE_MODULEDISPLAY 0
 #endif
 
 #if USE_MODULEDISPLAY != 0 && USE_MODULEDISPLAY != 1
 #error "USE_MODULEDISPLAY must be 0 or 1"
+#endif
+
+#ifndef APP_ATOMS3
+#define APP_ATOMS3 0
+#endif
+
+#if APP_ATOMS3 && (USE_MODULELLM || USE_MODULEDISPLAY)
+#error "AtomS3 uses its local display and EchoBase/PDM microphone"
 #endif
 
 // 1: native 1280x720, 2: 640x360 -> 720p, 4: 320x180 -> 720p.
