@@ -2,7 +2,10 @@
 
 The session resumed on 2026-10-18 to implement ModuleLLM microphone formant
 analysis and UART lip sync. Read `README.md`, `modulellm/README.md` and the actual
-sources when resuming. The user's goal is natural Avatar lip sync, not
+sources when resuming. README.md is the short build/usage guide; detailed
+configuration is in docs/CONFIGURATION.md, DSP/rendering/memory/tests in
+docs/IMPLEMENTATION.md, and troubleshooting in docs/TROUBLESHOOTING.md.
+The user's goal is natural Avatar lip sync, not
 recognition of all Japanese kana. Use a locally configured SSH host to access
 ModuleLLM; `modulellm-host` in examples is a placeholder. Inspect installed
 audio/UART services before use.
