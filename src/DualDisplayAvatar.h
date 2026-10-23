@@ -10,6 +10,8 @@ class DualDisplayAvatar {
   void nextExpression();
   void handleCommand(char command);
   void setExpression(m5avatar::Expression expression);
+  m5avatar::Expression getExpression() const { return expression_; }
+  bool isMouthDemoEnabled() const { return mouthDemo_; }
   void setMouthOpenRatio(float ratio);
   void setVowel(Vowel vowel, float confidence);
   void setBalloon(const String& title, const String& detail);

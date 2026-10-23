@@ -1,22 +1,32 @@
 # M5Unified Avatar Mic
 
-M5Stack CoreS3／AtomS3RのAvatarを、マイクの音声解析で口パクさせるPlatformIO / Arduinoプロジェクトです。
-CoreS3では内蔵マイクまたはModuleLLM、AtomS3RではEchoBaseまたはPDMUnitを使用します。
+M5Stack CoreS3／AtomS3／AtomS3RのAvatarを、マイクの音声解析で口パクさせるPlatformIO / Arduinoプロジェクトです。
+CoreS3では内蔵マイクまたはModuleLLM、AtomS3／AtomS3RではEchoBaseまたはPDMUnitを使用します。
 CoreS3でModuleDisplayを使うと、本体LCDに加えてHDMIモニターにも表示できます。
 アバターには指定の[M5Unified-Avatar](https://github.com/mongonta0716/M5Unified-Avatar)を使用しています。
 
-## AtomS3R＋EchoBase／PDMUnit
+## AtomS3／AtomS3R＋EchoBase／PDMUnit
 
-AtomS3R向けには`env:AtomS3`を選択します。CoreS3の設定は継承しつつ、
-音声入力・画面のフラグを環境内で明示して切り替えます。
-AtomS3R環境ではModuleLLM／ModuleDisplayの機能を無効にし、両モジュールを初期化しません。
-この環境はAtomS3Rの8MB Flash／8MB Octal PSRAM／128×128 LCDを対象にしています。
-通常のAtomS3（PSRAMなし）向け設定ではありません。
+実機に合わせてPlatformIOの環境を選びます。
+
+| 実機 | 環境 | Flash／PSRAM |
+| --- | --- | --- |
+| AtomS3 | `AtomS3-noPSRAM` | 8MB／なし |
+| AtomS3R | `AtomS3R` | 8MB／8MB Octal |
+
+既存の`AtomS3`環境は、互換性のため従来どおりAtomS3R向けとして残しています。
+通常のAtomS3には`AtomS3-noPSRAM`を指定してください。
+両環境とも128×128 LCDと外部音声入力を使い、ModuleLLM／ModuleDisplayは初期化しません。
 
 ```sh
-pio run -e AtomS3
-pio run -e AtomS3 -t upload
-pio device monitor -e AtomS3
+# AtomS3
+pio run -e AtomS3-noPSRAM
+pio run -e AtomS3-noPSRAM -t upload
+pio device monitor -e AtomS3-noPSRAM
+
+# AtomS3R
+pio run -e AtomS3R
+pio run -e AtomS3R -t upload
 ```
 
 起動時にEchoBaseのES8311（GPIO38=SDA、GPIO39=SCL、I²Cアドレス`0x18`）を確認します。
@@ -25,14 +35,21 @@ PDMの接続は白=CLK（GPIO1）、黄=DATA（GPIO2）、赤=5V、黒=GNDです
 PDMUnitにはI²Cの識別情報がないため、非接続でもPDM側が選ばれます。
 入力の選択は起動時に行います。機器を変更するときは電源を切って接続し直してください。
 
-AはAtomS3R本体の画面を押し込むボタンです。
+AはAtomS3／AtomS3R本体の画面を押し込むボタンです。
 
-| AtomS3RのボタンA | 動作 |
+| AtomS3／AtomS3RのボタンA | 動作 |
 | --- | --- |
-| 3秒未満で離す | Cal：静音2秒→各母音3秒×2回、発声の間に息つぎ2秒 |
+| 1回クリック | 離して350ms後にCal：静音2秒→各母音3秒×2回、発声の間に息つぎ2秒 |
+| ダブルクリック | 画面を90度ずつ回転し、向きをNVSへ保存 |
 | 3秒間押し続ける | 現在選択中の入力の調整値をリセット（1回だけ） |
 
-長押しを離したときにCalは開始しません。調整中の単押しは調整を最初から開始します。
+ダブルクリックは、1回目を離してから350ms以内に2回目を押し、離したときに確定します。
+単押しはダブルクリックの待ち時間の後にCalを開始します。2回目を3秒長押しした場合もリセットを優先し、
+長押しを離したときにCalや回転は実行しません。調整中の単押しは調整を最初から開始します。
+
+画面の向きは0→90→180→270→0度と切り替わり、再起動後はHello Worldから保存済みの向きになります。
+向きは音声調整と別のNVS領域に保存するため、入力切り替えや音声調整のリセットで変更されません。
+回転時はAvatarの描画領域を作り直し、表情・口パクのデモ状態と、進行中の音声調整を引き継ぎます。
 128×128画面では、調整・保存結果を読みやすい専用画面へ表示し、その後Avatarへ戻ります。
 通常時はライブラリのAvatarと母音表示を使い、画面下部のタッチボタンは描きません。
 EchoBaseでは起動時に「ピポ」を鳴らし、再生を終えてから録音を始めます。
@@ -47,7 +64,31 @@ EchoBase用とPDM用の調整値は別のNVSキーへ保存し、CoreS3用の既
 シリアルの`c`（Cal）、`x`（現在の入力のリセット）も利用できます。
 
 AtomS3R＋EchoBaseでは、表示・起動音・口パク、Aの単押し／3秒長押し、
-調整案内・保存・口パクへの復帰を実機で確認済みです。PDMUnitの実機確認は未実施です。
+調整案内・保存・口パクへの復帰を実機で確認済みです。
+AtomS3＋PDMUnitでも、表示・口パク、Aからの調整案内・保存・口パクへの復帰を確認しました。
+ダブルクリックによる回転とCalの誤開始がないこと、USBの抜き差し後に保存した向きで
+Hello World・Avatarが表示され、口パクが動くことも確認済みです。
+AtomS3Rの回転追加版はビルド確認済みです。
+
+### AtomS3のRAM使用量
+
+[AtomS3](https://docs.m5stack.com/en/core/AtomS3)はPSRAMを搭載しませんが、
+ESP32-S3の内部SRAMを使います。SoCのSRAMは512KBで、コードやシステム領域とも共有します
+（[ESP32-S3データシート](https://www.espressif.com/sites/default/files/documentation/esp32-s3_datasheet_en.pdf)）。
+現在の`AtomS3-noPSRAM`ビルドの静的データRAMは69,300バイト（約67.7KiB）で、
+PlatformIOが示す320KiBに対して21.1%です。この数値にはタスクのスタックやDMAなどの動的確保は含みません。
+
+128×128の顔は1bitキャンバス約2KiBと、128×8・16bitの転送バッファ約2KiBで描画します。
+M5GFXはPSRAMがない場合に内部RAMへ確保するため、描画ライブラリの変更は不要です。
+起動・録音描画開始・調整開始／保存／リセット時の`Atom memory:`ログで、内部RAMの空き・最小空き・
+最大連続領域とPSRAM総容量を確認できます。
+
+回転対応版のAtomS3＋PDMUnitの実測では、PSRAM総容量0の状態で録音・描画開始直後の内部RAM空きは
+300,700バイト（約294KiB）、その時点までの最小空きは295,572バイト、最大連続領域は270,324バイトでした。
+90度・180度への回転後も空きはそれぞれ300,632バイトでした。
+描画は約15fpsで、ユーザーによる調整保存・口パク復帰の確認も完了しています。
+この構成では内部RAMで動作できています。静的RAMの表示と実行時ヒープの表示は集計対象が異なるため、
+320KiBから静的使用量を引いた値がそのまま実行時の空きになるわけではありません。
 
 自動選択は[washishi氏の参考実装](https://github.com/washishi/m5stack-avatar-mic-nekomimi_led/blob/main/src/main.cpp)を参考にしています。
 旧版で使用されていた別のI2Sドライバーは併用せず、M5Unifiedが録音とスピーカーのポートを管理します。

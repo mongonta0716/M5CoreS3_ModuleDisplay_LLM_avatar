@@ -7,11 +7,20 @@ recognition of all Japanese kana. Use a locally configured SSH host to access
 ModuleLLM; `modulellm-host` in examples is a placeholder. Inspect installed
 audio/UART services before use.
 
-## AtomS3R frontend
+## AtomS3 / AtomS3R frontend
 
-`env:AtomS3` builds src/atom_s3.cpp for AtomS3R (8MB flash, Octal PSRAM via
-qio_opi, 128x128 LCD), using boards/m5stack-atoms3r.json based on M5Stack's
-M5Utility definition. Its complete build_flags list deliberately overrides the
+`env:AtomS3` remains the original AtomS3R build for compatibility, and
+`env:AtomS3R` is its explicit alias (8MB flash, Octal PSRAM via qio_opi,
+128x128 LCD), using boards/m5stack-atoms3r.json based on M5Stack's M5Utility
+definition. `env:AtomS3-noPSRAM` targets the original AtomS3 with the standard
+m5stack-atoms3 board, qio_qspi SDK, qio flash and no BOARD_HAS_PSRAM define.
+USB CDC is explicitly enabled. The board macro selects the startup name and
+M5Unified fallback board; do not treat an AtomS3 as an AtomS3R. Both use the
+same audio frontend and 128x128 renderer. M5GFX's SpriteBuffer falls back from
+PSRAM to internal DMA memory when PSRAM is absent, so no rendering library
+change is required. Atom memory logs report free/minimum/largest internal
+8-bit heap and total PSRAM at initialization, ready and calibration events.
+Its complete build_flags list deliberately overrides the
 CoreS3 common ModuleDisplay flag and forces both module flags to zero. The
 legacy source filter must exclude atom_s3.cpp to avoid duplicate setup/loop.
 Boot probes EchoBase's ES8311 at 0x18 on SDA38/SCL39 before M5.begin. ACK selects
@@ -25,14 +34,32 @@ The first version used M5Unified's default right-only I/O; EchoBase ACK and
 register writes succeeded, but the user reported no sound or lip sync. The
 user confirmed both work after the slot correction. PDM keeps its own input
 channel setting. PDM has no startup speaker output.
-A short release starts calibration; reaching 3000ms resets the selected profile
-once and suppresses calibration on release. CalibrationButton has native tests
-for thresholds, delayed polling and rollover. Per-input NVS keys atom-echo and
+A single release starts calibration after a 350ms double-click window. A second
+press within that window rotates on release, with no Cal before or afterwards.
+A 3000ms hold (including a second press) takes priority, resets the selected
+profile once and suppresses calibration/rotation on release. CalibrationButton
+has native ASan/UBSan tests for click/hold priority, timing boundaries, delayed
+polling and rollover. AtomDisplaySettings stores rotation 0..3 as an NVS byte
+in namespace atom-display, key rotation. Invalid/missing data defaults to 0.
+Restore orientation before the splash. Rotation only writes this key, never
+vowel models; resetting a vowel model does not clear screen orientation.
+The Atom frontend owns DualDisplayAvatar through unique_ptr and recreates the
+renderer on rotation, retaining expression and demo state and preserving the
+active calibration. Free the old renderer before allocating new framebuffers;
+if registration fails, restore the previous orientation. On 2026-10-23 the
+user confirmed on AtomS3+PDMUnit that double clicks rotate without starting
+Cal, a nonzero saved orientation returns after USB power cycling for both the
+splash and Avatar, and lip sync still works. Serial recorded rotations to
+90 and 180 degrees with NVS=OK, with the same 300,632-byte internal free heap
+after each. Native gesture tests passed, all three Atom environment names
+built, and all four CoreS3 variants built using a temporary config without
+the user's common display override. AtomS3R rotation is build-verified only.
+Per-input NVS keys atom-echo and
 atom-pdm preserve CoreS3's default model key. A reset affects only the selected
 input. CalibrationText shares the prompts with CoreS3; Atom renders a dedicated
 readable calibration screen rather than the fixed-size two-line face balloon.
 Do not flash a connected CoreS3 while verifying this frontend: identify the
-user's AtomS3R first. Build AtomS3 and the four CoreS3 environments after changes
+connected Atom model first. Build AtomS3 and the four CoreS3 environments after changes
 to shared calibration/audio code. AtomS3 and all four CoreS3 combinations
 built successfully (the compatibility check used a temporary config without
 the user's common display override). Native ASan/UBSan tests passed.
@@ -43,8 +70,30 @@ after the slot correction. The user also confirmed on 2026-10-22 that A's
 3-second reset, suppression of calibration on release, short-press calibration,
 readable prompts, saving and return to lip sync all work on AtomS3R+EchoBase.
 This verifies the operation flow, not a measured vowel-recognition accuracy.
-PDMUnit hardware is not yet verified. Preserve the working firmware and saved
-calibration; do not reset NVS or publish personal model values.
+PDMUnit was subsequently verified on original AtomS3 (see below). Preserve
+the working firmware and saved calibration; do not reset NVS or publish
+personal model values.
+
+On 2026-10-23 the original AtomS3 no-PSRAM environment and both AtomS3R names
+built successfully. Before rotation support, AtomS3 static RAM was
+69,468 / 327,680 bytes (21.2%); this
+excludes dynamic allocations. The renderer adds about 2KiB of 1-bit canvas
+and 2KiB of DMA strip on the 128x128 target. The user connected original
+AtomS3+PDMUnit, and the no-PSRAM firmware was uploaded normally, retaining NVS.
+Boot logs confirm board type 11, 128x128 LCD, PSRAM=0, PDM capture on I2S0
+(CLK1/DATA2), nonzero PCM and mouth response, and about 15.2fps / 22.7ms drawing.
+At ready: internal 8-bit free=300,768 bytes, minimum=295,640 and largest=270,324.
+These are heap measurements at initialization, not a calibration-session peak
+measurement. PlatformIO static RAM and runtime heap cover different memory
+regions; do not derive runtime free heap by subtracting from the 320KiB display.
+The user confirmed display, lip sync, A-started calibration prompts, saving and
+return to lip sync on 2026-10-23. This verifies functionality on this combination,
+not vowel-recognition accuracy or every AtomS3/EchoBase/PDM combination.
+The initial serial monitor saw one ENXIO disconnect. The port reappeared;
+a subsequent 20-second read without resetting showed frames 4,700 through
+5,954 and continuous rendering, with no further disconnect or panic observed.
+The cause of the initial disconnect is unknown; this is not evidence of OOM.
+Do not upload to an unidentified connected board or reset its saved model.
 
 ## Module selection (2026-10-20)
 
